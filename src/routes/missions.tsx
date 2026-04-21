@@ -11,7 +11,7 @@ import { useAudio } from "@/hooks/useAudio";
 export const Route = createFileRoute("/missions")({
   head: () => ({
     meta: [
-      { title: "Golden Room — Missioni" },
+      { title: "GameSpark — Missioni" },
       { name: "description", content: "Completa missioni giornaliere e guadagna Spark e Ticket." },
     ],
   }),

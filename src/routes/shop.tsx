@@ -12,7 +12,7 @@ import { useAudio } from "@/hooks/useAudio";
 
 export const Route = createFileRoute("/shop")({
   head: () => ({
-    meta: [{ title: "Golden Room — Shop" }],
+    meta: [{ title: "GameSpark — Shop" }],
   }),
   component: ShopPage,
 });

@@ -1,7 +1,7 @@
 {
-  "name": "Golden Room",
-  "short_name": "Golden Room",
-  "description": "Golden Room: bingo live, reveal premium, missioni e premi in formato app.",
+  "name": "GameSpark",
+  "short_name": "GameSpark",
+  "description": "GameSpark: bingo live, missioni, premi e lobby in formato app.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",

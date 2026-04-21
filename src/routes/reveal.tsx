@@ -13,7 +13,7 @@ import { useAudio } from "@/hooks/useAudio";
 export const Route = createFileRoute("/reveal")({
   head: () => ({
     meta: [
-      { title: "Golden Room — Reveal" },
+      { title: "GameSpark — Reveal" },
       { name: "description", content: "Apri il tuo reveal premium quotidiano e scopri ricompense magiche." },
     ],
   }),

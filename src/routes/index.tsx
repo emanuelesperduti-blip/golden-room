@@ -22,7 +22,7 @@ export const Route = createFileRoute("/")(
   {
     head: () => ({
       meta: [
-        { title: "Golden Room — Home" },
+        { title: "GameSpark — Home" },
         { name: "description", content: "Reveal premium, bingo live, missioni e Spark ogni giorno." },
       ],
     }),

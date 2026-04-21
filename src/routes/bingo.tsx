@@ -26,6 +26,8 @@ import sideGiftBlue from "@/assets/side-gift-blue.png";
 import { cardForRound, drawOrderForRound, getRoom, getRoomTimeline, maxCardsPerRoom } from "@/lib/rooms";
 import { useGameStore } from "@/lib/gameStore";
 import { useAudio } from "@/hooks/useAudio";
+import { setAuthRedirect } from "@/lib/authRedirect";
+import { useAuth } from "@/hooks/useAuth";
 import { BOTS, BotChatEngine } from "@/lib/bots";
 
 const searchSchema = z.object({ roomId: z.string().optional() });
@@ -33,7 +35,7 @@ const searchSchema = z.object({ roomId: z.string().optional() });
 export const Route = createFileRoute("/bingo")({
   validateSearch: searchSchema,
   head: () => ({
-    meta: [{ title: "Golden Room — Bingo Live" }],
+    meta: [{ title: "GameSpark — Bingo Live" }],
   }),
   component: BingoPage,
 });
@@ -82,16 +84,79 @@ const CELL_PALETTE = [
 type ChatItem = { user: string; text: string; color: string; avatar: string };
 type PurchasedCardState = { roundIndex: number; slot: number; marked: number[] };
 type DisplayCard = PurchasedCardState & { key: string; card: number[]; markedSet: Set<number> };
+type CardInsight = DisplayCard & {
+  bestMissing: number;
+  bestLineIndices: number[];
+  matchedInBestLine: number;
+  completedLines: number;
+};
 
 function cardKey(roundIndex: number, slot: number) {
   return `${roundIndex}-${slot}`;
+}
+
+function analyzeCard(card: number[], marked: Set<number>, size: number): Omit<CardInsight, keyof DisplayCard> {
+  const lines: number[][] = [];
+
+  for (let r = 0; r < size; r++) {
+    lines.push(Array.from({ length: size }, (_, i) => r * size + i));
+  }
+
+  for (let c = 0; c < size; c++) {
+    lines.push(Array.from({ length: size }, (_, i) => i * size + c));
+  }
+
+  lines.push(Array.from({ length: size }, (_, i) => i * size + i));
+  lines.push(Array.from({ length: size }, (_, i) => i * size + (size - 1 - i)));
+
+  let bestMissing = Number.POSITIVE_INFINITY;
+  let bestLineIndices: number[] = [];
+  let matchedInBestLine = 0;
+  let completedLines = 0;
+
+  for (const indices of lines) {
+    let missing = 0;
+    let matched = 0;
+
+    for (const idx of indices) {
+      const value = card[idx];
+      if (value === 0 || marked.has(value)) {
+        matched += 1;
+      } else {
+        missing += 1;
+      }
+    }
+
+    if (missing === 0) completedLines += 1;
+
+    if (missing < bestMissing || (missing === bestMissing && matched > matchedInBestLine)) {
+      bestMissing = missing;
+      bestLineIndices = indices;
+      matchedInBestLine = matched;
+    }
+  }
+
+  return {
+    bestMissing: Number.isFinite(bestMissing) ? bestMissing : size,
+    bestLineIndices,
+    matchedInBestLine,
+    completedLines,
+  };
+}
+
+function missingLabel(bestMissing: number, completedLines: number): string {
+  if (completedLines > 0 || bestMissing <= 0) return 'Bingo pronto';
+  if (bestMissing === 1) return '1 mancante';
+  if (bestMissing === 2) return '2 mancanti';
+  return `${bestMissing} mancanti`;
 }
 
 function BingoPage() {
   const { roomId } = Route.useSearch();
   const room = getRoom(roomId);
   const navigate = useNavigate();
-  const { sfx, speakNumber, startMusic, stopMusic } = useAudio();
+  const { sfx, speakNumber, startMusic, stopMusic, stopAll } = useAudio();
+  const { user } = useAuth();
 
   const playerSeed = useGameStore((s) => s.playerSeed);
   const username = useGameStore((s) => s.username);
@@ -111,6 +176,9 @@ function BingoPage() {
   const [chatOpen, setChatOpen] = useState(false);
   const [showWin, setShowWin] = useState(false);
   const [winnerName, setWinnerName] = useState<string | null>(null);
+  const [focusedCardKey, setFocusedCardKey] = useState<string | null>(null);
+  const [guestNotice, setGuestNotice] = useState<string | null>(null);
+  const [pageVisible, setPageVisible] = useState(() => typeof document === "undefined" || document.visibilityState === "visible");
   const [chat, setChat] = useState<ChatItem[]>([
     { user: "AlessioPro", text: "Chi è pronto? 🔥", color: "oklch(0.7 0.25 25)", avatar: "🎯" },
     { user: "Giulia92", text: "Stasera vinco!! 🌸", color: "oklch(0.74 0.18 150)", avatar: "🌸" },
@@ -123,11 +191,14 @@ function BingoPage() {
   const playedRoundRef = useRef<number | null>(null);
   const cleanupRoundRef = useRef<number | null>(null);
   const bingoRewardedRoundRef = useRef<number | null>(null);
+  const speakTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const markTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const timeline = getRoomTimeline(room, now);
   const currentRoundIndex = timeline.activeRoundIndex;
   const upcomingRoundIndex = timeline.upcomingRoundIndex;
   const maxCards = maxCardsPerRoom(room);
+  const isGuest = !user;
 
   const drawOrder = useMemo(() => drawOrderForRound(room, currentRoundIndex), [room, currentRoundIndex]);
   const botWinner = useMemo(() => BOTS[(currentRoundIndex + room.id.length) % BOTS.length], [currentRoundIndex, room.id]);
@@ -165,8 +236,32 @@ function BingoPage() {
   const activeCards = timeline.phase === "playing" ? currentCards : [];
   const previewCards = timeline.phase === "waiting" ? currentCards : upcomingCards;
   const visibleCards = activeCards.length > 0 ? activeCards : previewCards;
+  const deckCards = useMemo<CardInsight[]>(
+    () =>
+      visibleCards.map((entry) => ({
+        ...entry,
+        ...analyzeCard(entry.card, entry.markedSet, room.cardSize),
+      })),
+    [visibleCards, room.cardSize],
+  );
+  const autoFeaturedKey = useMemo(
+    () =>
+      deckCards.length > 0
+        ? [...deckCards].sort((a, b) => a.bestMissing - b.bestMissing || b.matchedInBestLine - a.matchedInBestLine || a.slot - b.slot)[0].key
+        : null,
+    [deckCards],
+  );
   const isLateEntry = timeline.phase === "playing" && currentCards.length === 0;
   const finishedWinner = winnerName ?? botWinner.name;
+  const recentResults = useMemo(() => {
+    const settledRound = timeline.phase === "finished" ? currentRoundIndex : currentRoundIndex - 1;
+    return Array.from({ length: 3 }, (_, idx) => settledRound - idx)
+      .filter((roundIndex) => roundIndex >= 0)
+      .map((roundIndex) => ({
+        roundIndex,
+        winner: BOTS[(roundIndex + room.id.length) % BOTS.length],
+      }));
+  }, [timeline.phase, currentRoundIndex, room.id]);
 
   const targetRound = timeline.phase === "waiting" ? currentRoundIndex : upcomingRoundIndex;
   const reservedCountForTarget = purchasedCards.filter((entry) => entry.roundIndex === targetRound).length;
@@ -179,6 +274,7 @@ function BingoPage() {
   const secondsLabel = `${Math.floor(timeline.phaseRemainingSec / 60)
     .toString()
     .padStart(2, "0")}:${(timeline.phaseRemainingSec % 60).toString().padStart(2, "0")}`;
+  const phasePillLabel = timeline.phase === "waiting" ? secondsLabel : timeline.phase === "playing" ? "LIVE" : "VALIDAZIONE";
   const phaseDuration =
     timeline.phase === "waiting" ? room.waitingSec : timeline.phase === "playing" ? room.playingSec : room.finishedSec;
   const phaseProgress = Math.min(100, Math.max(0, (timeline.phaseElapsedSec / Math.max(1, phaseDuration)) * 100));
@@ -197,16 +293,102 @@ function BingoPage() {
       : timeline.phase === "playing"
         ? "PARTITA IN CORSO"
         : "FINE PARTITA";
+  const featuredCard = deckCards.find((entry) => entry.key === focusedCardKey) ?? deckCards[0] ?? null;
+  const featuredCardIndex = featuredCard ? deckCards.findIndex((entry) => entry.key === featuredCard.key) : -1;
+  const bestCard = deckCards.find((entry) => entry.key === autoFeaturedKey) ?? null;
+  const featuredCardLabel = featuredCard ? missingLabel(featuredCard.bestMissing, featuredCard.completedLines) : null;
+  const urgentCards = deckCards.filter((entry) => entry.bestMissing <= 2).length;
 
   useEffect(() => {
+    if (deckCards.length === 0) {
+      if (focusedCardKey != null) setFocusedCardKey(null);
+      return;
+    }
+
+    if (!focusedCardKey || !deckCards.some((entry) => entry.key === focusedCardKey)) {
+      setFocusedCardKey(autoFeaturedKey);
+    }
+  }, [deckCards, focusedCardKey, autoFeaturedKey]);
+
+  useEffect(() => {
+    if (!guestNotice) return;
+    const timeout = setTimeout(() => setGuestNotice(null), 3200);
+    return () => clearTimeout(timeout);
+  }, [guestNotice]);
+
+  useEffect(() => {
+    if (!pageVisible) return;
     const t = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [pageVisible]);
 
   useEffect(() => {
+    if (typeof document === "undefined") return;
+
+    const handleVisibility = () => {
+      const visible = document.visibilityState === "visible";
+      setPageVisible(visible);
+      if (!visible) {
+        if (speakTimeoutRef.current) {
+          clearTimeout(speakTimeoutRef.current);
+          speakTimeoutRef.current = null;
+        }
+        if (markTimeoutRef.current) {
+          clearTimeout(markTimeoutRef.current);
+          markTimeoutRef.current = null;
+        }
+        stopAll();
+      } else {
+        setNow(Date.now());
+      }
+    };
+
+    const handleBlur = () => {
+      setPageVisible(false);
+      if (speakTimeoutRef.current) {
+        clearTimeout(speakTimeoutRef.current);
+        speakTimeoutRef.current = null;
+      }
+      if (markTimeoutRef.current) {
+        clearTimeout(markTimeoutRef.current);
+        markTimeoutRef.current = null;
+      }
+      stopAll();
+    };
+
+    const handleFocus = () => {
+      setPageVisible(true);
+      setNow(Date.now());
+    };
+
+    document.addEventListener("visibilitychange", handleVisibility);
+    window.addEventListener("pagehide", handleVisibility);
+    window.addEventListener("pageshow", handleFocus);
+    window.addEventListener("focus", handleFocus);
+    window.addEventListener("beforeunload", handleBlur);
+    window.addEventListener("blur", handleBlur);
+    document.addEventListener("freeze", handleBlur as EventListener);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+      window.removeEventListener("pagehide", handleVisibility);
+      window.removeEventListener("pageshow", handleFocus);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("beforeunload", handleBlur);
+      window.removeEventListener("blur", handleBlur);
+      document.removeEventListener("freeze", handleBlur as EventListener);
+      stopAll();
+    };
+  }, [stopAll]);
+
+  useEffect(() => {
+    if (!pageVisible) {
+      stopMusic();
+      return;
+    }
     if (!musicMuted && !muted) startMusic();
     return () => stopMusic();
-  }, [musicMuted, muted, startMusic, stopMusic]);
+  }, [musicMuted, muted, pageVisible, startMusic, stopMusic]);
 
   useEffect(() => {
     const engine = new BotChatEngine((msg) => setChat((c) => [...c.slice(-35), msg]));
@@ -242,18 +424,28 @@ function BingoPage() {
   }, [timeline.phase, currentRoundIndex]);
 
   useEffect(() => {
-    if (drawnNumber == null) return;
+    if (!pageVisible || drawnNumber == null) return;
     const drawKey = `${currentRoundIndex}-${drawnNumber}`;
     if (spokenDrawRef.current === drawKey) return;
     spokenDrawRef.current = drawKey;
 
     sfx("draw");
-    setTimeout(() => speakNumber(drawnNumber), 150);
+    speakTimeoutRef.current = setTimeout(() => {
+      speakNumber(drawnNumber);
+      speakTimeoutRef.current = null;
+    }, 150);
     botEngineRef.current?.onDraw();
 
-    if (currentReservations.length === 0) return;
+    if (currentReservations.length === 0) {
+      return () => {
+        if (speakTimeoutRef.current) {
+          clearTimeout(speakTimeoutRef.current);
+          speakTimeoutRef.current = null;
+        }
+      };
+    }
 
-    setTimeout(() => {
+    markTimeoutRef.current = setTimeout(() => {
       let changed = false;
       setPurchasedCards((prev) =>
         prev.map((entry) => {
@@ -265,8 +457,20 @@ function BingoPage() {
         }),
       );
       if (changed) sfx("mark");
+      markTimeoutRef.current = null;
     }, 500);
-  }, [drawnNumber, currentRoundIndex, currentReservations.length, room, playerSeed, sfx, speakNumber]);
+
+    return () => {
+      if (speakTimeoutRef.current) {
+        clearTimeout(speakTimeoutRef.current);
+        speakTimeoutRef.current = null;
+      }
+      if (markTimeoutRef.current) {
+        clearTimeout(markTimeoutRef.current);
+        markTimeoutRef.current = null;
+      }
+    };
+  }, [pageVisible, drawnNumber, currentRoundIndex, currentReservations.length, room, playerSeed, sfx, speakNumber]);
 
   useEffect(() => {
     if (timeline.phase !== "playing" || drawCount < room.cardSize) return;
@@ -298,12 +502,30 @@ function BingoPage() {
   }, [timeline.phase, botWinner.name, winnerName]);
 
   useEffect(() => {
+    return () => {
+      if (speakTimeoutRef.current) clearTimeout(speakTimeoutRef.current);
+      if (markTimeoutRef.current) clearTimeout(markTimeoutRef.current);
+      stopAll();
+    };
+  }, [stopAll]);
+
+  useEffect(() => {
     const nextMax = Math.max(1, affordableSlots || (room.ticketCost === 0 ? Math.max(1, availableSlots) : 1));
     setPurchaseQty((prev) => Math.max(1, Math.min(prev, nextMax)));
   }, [affordableSlots, availableSlots, room.ticketCost]);
 
   function handleMark(cardSlot: number, n: number) {
+    if (isGuest) {
+      setGuestNotice("Accedi o registrati per giocare davvero il turno e marcare le cartelle.");
+      sfx("error");
+      return;
+    }
     if (timeline.phase !== "playing" || n === 0) return;
+    if (!drawnNumbers.includes(n)) {
+      setGuestNotice("Puoi marcare solo i numeri già estratti in questo turno.");
+      sfx("error");
+      return;
+    }
     const currentCard = currentCards.find((entry) => entry.slot === cardSlot);
     if (!currentCard || !currentCard.card.includes(n)) return;
 
@@ -319,12 +541,29 @@ function BingoPage() {
     );
   }
 
+  function navigateWithStop(path: "/lobby" | "/shop" | "/auth" | "/missions" | "/reveal") {
+    stopAll();
+    void navigate({ to: path });
+  }
+
+  function goToAuth() {
+    stopAll();
+    setAuthRedirect(window.location.pathname + window.location.search);
+    void navigate({ to: "/auth" });
+  }
+
   function reserveCards() {
+    if (isGuest) {
+      setGuestNotice("Modalità osservatore attiva: accedi per comprare cartelle e partecipare ai round.");
+      sfx("error");
+      goToAuth();
+      return;
+    }
     if (timeline.phase === "finished") return;
     if (!canBuyAny || availableSlots <= 0) {
       if (room.ticketCost > 0 && tickets < room.ticketCost) {
         sfx("tap");
-        void navigate({ to: "/shop" });
+        navigateWithStop("/shop");
       }
       return;
     }
@@ -335,7 +574,7 @@ function BingoPage() {
 
     if (totalTickets > 0 && !spendTickets(totalTickets)) {
       sfx("tap");
-      void navigate({ to: "/shop" });
+      navigateWithStop("/shop");
       return;
     }
 
@@ -357,6 +596,12 @@ function BingoPage() {
   }
 
   function sendChat() {
+    if (isGuest) {
+      setGuestNotice("Accedi per scrivere in chat e partecipare come giocatore registrato.");
+      sfx("error");
+      goToAuth();
+      return;
+    }
     if (!chatInput.trim()) return;
     sfx("tap");
     setChat((c) => [...c, { user: "Tu", text: chatInput, color: "oklch(0.85 0.18 90)", avatar: "⭐" }]);
@@ -371,7 +616,7 @@ function BingoPage() {
         <button
           onClick={() => {
             sfx("tap");
-            void navigate({ to: "/lobby" });
+            navigateWithStop("/lobby");
           }}
           className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white active:scale-90"
           aria-label="Indietro"
@@ -396,6 +641,29 @@ function BingoPage() {
         </div>
         <div className="w-9" />
       </div>
+
+      {isGuest && (
+        <section className="relative z-20 px-4 pb-2">
+          <div className="rounded-3xl border border-gold/30 bg-[linear-gradient(180deg,oklch(0.24_0.11_305/0.96),oklch(0.16_0.08_300/0.98))] px-4 py-3 shadow-card-game">
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <p className="text-sm font-extrabold text-gold">Modalità osservatore</p>
+                <p className="mt-1 text-xs font-bold text-white/70">
+                  Puoi vedere countdown, estrazioni e lobby della room, ma per comprare cartelle, marcare e scrivere in chat devi accedere.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => goToAuth()}
+                className="shrink-0 rounded-2xl bg-gold-shine px-3 py-2 text-xs font-extrabold text-purple-deep shadow-button-gold"
+              >
+                Accedi
+              </button>
+            </div>
+            {guestNotice && <p className="mt-2 text-[11px] font-bold text-rose-200">{guestNotice}</p>}
+          </div>
+        </section>
+      )}
 
       <div
         className="pointer-events-none absolute inset-x-0 top-16 h-72 opacity-40"
@@ -449,10 +717,21 @@ function BingoPage() {
           {timeline.phase === "finished" && `Vincitore del turno: ${finishedWinner}. Tra poco riparte una nuova prevendita.`}
         </p>
 
+        {timeline.phase === "playing" && (
+          <div className="mx-auto mt-3 inline-flex items-center gap-2 rounded-full border border-red-300/25 bg-red-400/10 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.14em] text-red-100">
+            <span className="h-2 w-2 rounded-full bg-red-300" /> Vendita cartelle turno live chiusa
+          </div>
+        )}
+        {timeline.phase === "finished" && (
+          <div className="mx-auto mt-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/8 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.14em] text-white/80">
+            <span className="h-2 w-2 rounded-full bg-gold" /> Validazione vincita in corso
+          </div>
+        )}
+
         <div className="mx-auto mt-3 max-w-sm rounded-2xl border border-white/10 bg-black/25 px-3 py-3 shadow-card-game">
           <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-extrabold uppercase tracking-[0.14em] text-white/65">
             <span>{timeline.phase === "waiting" ? "Prevendita attiva" : timeline.phase === "playing" ? "Round live" : "Chiusura turno"}</span>
-            <span>{secondsLabel}</span>
+            <span>{phasePillLabel}</span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-white/10">
             <motion.div
@@ -488,6 +767,36 @@ function BingoPage() {
         </div>
       </section>
 
+      <section className="relative z-10 mt-3 px-4">
+        <div className="rounded-3xl border border-white/10 bg-card-game p-4 shadow-card-game">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-extrabold text-white">Ultimi esiti room</p>
+              <p className="mt-1 text-[11px] font-bold text-white/55">Stile sala online: countdown solo per il prossimo avvio, vincita validata a parte.</p>
+            </div>
+            <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/55">Storico live</span>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            {recentResults.map(({ roundIndex, winner }) => (
+              <div key={roundIndex} className="flex items-center justify-between gap-3 rounded-2xl border border-white/8 bg-black/20 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{winner.avatar}</span>
+                  <div>
+                    <p className="text-xs font-extrabold text-white">Round #{roundIndex + 1}</p>
+                    <p className="text-[11px] font-bold text-white/55">Vincitore validato: {winner.name}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-extrabold text-gold">+{room.sparkReward} Spark</p>
+                  <p className="text-[11px] font-bold text-white/55">+{room.ticketReward} Ticket</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {(timeline.phase === "playing" && currentReservations.length === 0) || timeline.phase === "finished" ? (
         <section className="relative z-10 mt-3 px-4">
           <div className="rounded-3xl border border-white/10 bg-card-game p-4 shadow-card-game">
@@ -514,50 +823,114 @@ function BingoPage() {
 
       <section className="relative z-10 mt-4 flex items-start gap-2 px-2">
         <div className="flex flex-col gap-2 pt-2">
-          <SideBtn img={sideHearts} onClick={() => { sfx("coin"); addSparks(5); }} label="+5" />
-          <SideBtn img={sideGift} onClick={() => { sfx("coin"); addSparks(10); }} label="+10" />
+          <SideBtn img={sideHearts} onClick={() => { sfx("tap"); navigateWithStop(isGuest ? "/auth" : "/missions"); }} label={isGuest ? "login" : "missioni"} />
+          <SideBtn img={sideGift} onClick={() => { sfx("tap"); navigateWithStop("/reveal"); }} label="reveal" />
         </div>
 
         <div className="flex-1 overflow-hidden rounded-[1.75rem] border border-white/12 bg-[linear-gradient(180deg,oklch(0.28_0.14_305/0.95),oklch(0.18_0.1_300/0.98))] p-3 shadow-card-game">
-          {visibleCards.length > 0 ? (
+          {deckCards.length > 0 ? (
             <>
-              <div className="mb-3 flex items-center justify-between gap-2">
+              <div className="mb-3 flex items-start justify-between gap-2">
                 <div>
                   <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-gold">
-                    {activeCards.length > 0 ? "Multi-cartella live" : timeline.phase === "waiting" ? "Cartelle pronte" : "Cartelle prenotate"}
+                    {activeCards.length > 0 ? "Multi-cartella premium" : timeline.phase === "waiting" ? "Deck pronto" : "Deck prenotato"}
                   </p>
                   <p className="text-[11px] font-bold text-white/60">
                     {activeCards.length > 0
-                      ? `Stai giocando con ${activeCards.length} ${activeCards.length === 1 ? "cartella" : "cartelle"}`
-                      : `Hai ${visibleCards.length} ${visibleCards.length === 1 ? "cartella" : "cartelle"} bloccate per il prossimo via`}
+                      ? `Stai giocando con ${activeCards.length} ${activeCards.length === 1 ? "cartella" : "cartelle"}. La migliore viene evidenziata automaticamente.`
+                      : `Hai ${deckCards.length} ${deckCards.length === 1 ? "cartella" : "cartelle"} bloccate: puoi scorrerle con il mini-switch qui sotto.`}
                   </p>
                 </div>
-                <span className="rounded-full bg-white/8 px-2 py-1 text-[10px] font-extrabold text-white/70">
-                  Round #{(activeCards.length > 0 ? currentRoundIndex : targetRound) + 1}
-                </span>
+                <div className="flex flex-col items-end gap-1 text-right">
+                  {bestCard && (
+                    <span className="rounded-full border border-gold/35 bg-gold/10 px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-gold">
+                      {missingLabel(bestCard.bestMissing, bestCard.completedLines)}
+                    </span>
+                  )}
+                  {bestCard && featuredCard && bestCard.key !== featuredCard.key && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        sfx("tap");
+                        setFocusedCardKey(bestCard.key);
+                      }}
+                      className="rounded-full border border-cyan-300/30 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-cyan-100"
+                    >
+                      Vai alla migliore
+                    </button>
+                  )}
+                </div>
               </div>
 
-              <div className="no-scrollbar flex snap-x snap-mandatory gap-3 overflow-x-auto pb-1">
-                {visibleCards.map((entry, idx) => (
+              {deckCards.length > 1 && (
+                <div className="no-scrollbar mb-3 flex gap-2 overflow-x-auto pb-1">
+                  {deckCards.map((entry, idx) => {
+                    const label = missingLabel(entry.bestMissing, entry.completedLines);
+                    const isFocused = featuredCard?.key === entry.key;
+                    const isBest = bestCard?.key === entry.key;
+
+                    return (
+                      <button
+                        key={`${entry.key}-switch`}
+                        type="button"
+                        onClick={() => {
+                          sfx("tap");
+                          setFocusedCardKey(entry.key);
+                        }}
+                        className={`min-w-[112px] rounded-2xl border px-3 py-2 text-left transition-all active:scale-95 ${
+                          isFocused
+                            ? "border-gold/55 bg-gold/12 shadow-[0_0_0_1px_oklch(0.85_0.18_90/0.25)]"
+                            : "border-white/10 bg-black/20"
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-extrabold text-white">#{idx + 1}</span>
+                          {isBest ? (
+                            <span className="rounded-full bg-cyan-400/15 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.12em] text-cyan-100">
+                              Best
+                            </span>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 text-[11px] font-extrabold text-gold">{label}</p>
+                        <p className="mt-0.5 text-[10px] font-bold text-white/45">slot {entry.slot + 1}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+
+              {featuredCard && (
+                <>
                   <BingoCardPanel
-                    key={entry.key}
-                    entry={entry}
-                    index={idx}
-                    total={visibleCards.length}
+                    entry={featuredCard}
+                    index={featuredCardIndex >= 0 ? featuredCardIndex : 0}
+                    total={deckCards.length}
                     size={room.cardSize}
                     glowColor={glowColor}
-                    isInteractive={timeline.phase === "playing" && entry.roundIndex === currentRoundIndex}
+                    isInteractive={timeline.phase === "playing" && featuredCard.roundIndex === currentRoundIndex}
                     subtitle={
-                      timeline.phase === "playing" && entry.roundIndex === currentRoundIndex
-                        ? "Valida per la partita in corso"
-                        : entry.roundIndex === currentRoundIndex
+                      timeline.phase === "playing" && featuredCard.roundIndex === currentRoundIndex
+                        ? "Cartella in focus per la partita in corso"
+                        : featuredCard.roundIndex === currentRoundIndex
                           ? "Sarà attiva allo start del round"
                           : "Valida per il prossimo turno"
                     }
+                    bestLabel={featuredCardLabel ?? "Deck pronto"}
+                    isBest={bestCard?.key === featuredCard.key}
+                    bestLineIndices={featuredCard.bestLineIndices}
                     onMark={handleMark}
                   />
-                ))}
-              </div>
+
+                  <div className="mt-3 grid grid-cols-3 gap-2">
+                    <PremiumMetric
+                      title="Focus"
+                      value={bestCard?.key === featuredCard.key ? "Auto best" : `Deck #${featuredCardIndex + 1}`}
+                    />
+                    <PremiumMetric title="Vicine al bingo" value={urgentCards > 0 ? `${urgentCards}/${deckCards.length}` : "0"} />
+                    <PremiumMetric title="Linee chiuse" value={`${featuredCard.completedLines}`} />
+                  </div>
+                </>
+              )}
             </>
           ) : (
             <div className="flex min-h-[240px] flex-col items-center justify-center px-4 text-center">
@@ -566,19 +939,21 @@ function BingoPage() {
                 {timeline.phase === "waiting" ? "Acquista una o più cartelle per il prossimo turno" : "Nessuna cartella attiva in questa partita"}
               </p>
               <p className="mt-1 text-sm font-bold text-white/60">
-                {timeline.phase === "waiting"
-                  ? "Durante il countdown la vendita è aperta: scegli quante cartelle vuoi e partecipi appena inizia la partita."
-                  : timeline.phase === "playing"
-                    ? "Sei entrato a partita iniziata. Puoi già prenotare più cartelle valide per il prossimo turno."
-                    : "Il turno è in chiusura. Attendi il nuovo countdown per comprare la prossima cartella."}
+                {isGuest
+                  ? "Stai osservando la room come ospite. Accedi per comprare cartelle e partecipare davvero al prossimo turno."
+                  : timeline.phase === "waiting"
+                    ? "Durante il countdown la vendita è aperta: scegli quante cartelle vuoi e partecipi appena inizia la partita."
+                    : timeline.phase === "playing"
+                      ? "Sei entrato a partita iniziata. Puoi già prenotare più cartelle valide per il prossimo turno."
+                      : "Il turno è in chiusura. Attendi il nuovo countdown per comprare la prossima cartella."}
               </p>
             </div>
           )}
         </div>
 
         <div className="flex flex-col gap-2 pt-2">
-          <SideBtn img={sideTrophy} onClick={() => { sfx("coin"); addSparks(15); }} label="+15" />
-          <SideBtn img={sideGiftBlue} onClick={() => { sfx("coin"); addTickets(1); }} label="+1🎫" />
+          <SideBtn img={sideTrophy} onClick={() => { sfx("tap"); navigateWithStop("/missions"); }} label="premi" />
+          <SideBtn img={sideGiftBlue} onClick={() => { sfx("tap"); navigateWithStop("/shop"); }} label="shop" />
         </div>
       </section>
 
@@ -628,7 +1003,8 @@ function BingoPage() {
                   <button
                     type="button"
                     onClick={() => setPurchaseQty((prev) => Math.max(1, prev - 1))}
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white active:scale-95"
+                    disabled={purchaseQty <= 1}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
                     aria-label="Diminuisci cartelle"
                   >
                     <Minus className="h-4 w-4" />
@@ -637,7 +1013,8 @@ function BingoPage() {
                   <button
                     type="button"
                     onClick={() => setPurchaseQty((prev) => Math.min(prev + 1, Math.max(1, room.ticketCost === 0 ? availableSlots : affordableSlots || prev + 1)))}
-                    className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white active:scale-95"
+                    disabled={availableSlots === 0 || purchaseQty >= Math.max(1, room.ticketCost === 0 ? availableSlots : affordableSlots || purchaseQty)}
+                    className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-white active:scale-95 disabled:cursor-not-allowed disabled:opacity-40"
                     aria-label="Aumenta cartelle"
                   >
                     <Plus className="h-4 w-4" />
@@ -652,26 +1029,32 @@ function BingoPage() {
               </div>
             </div>
 
+            <p className="-mt-1 text-[11px] font-bold text-white/55">
+              Scegli qui quante cartelle bloccare con i pulsanti − / +. Massimo room: {maxCards}.
+            </p>
+
             <button
               type="button"
-              onClick={reserveCards}
-              disabled={timeline.phase === "finished" || availableSlots === 0 || (room.ticketCost > 0 && !canBuyAny)}
+              onClick={isGuest ? () => goToAuth() : reserveCards}
+              disabled={timeline.phase === "finished" || (!isGuest && availableSlots === 0) || (!isGuest && room.ticketCost > 0 && !canBuyAny)}
               className="rounded-2xl bg-gold-shine px-4 py-3 text-sm font-extrabold text-purple-deep shadow-button-gold disabled:cursor-not-allowed disabled:opacity-50"
             >
-              {timeline.phase === "finished"
-                ? "Turno in chiusura"
-                : availableSlots === 0
-                  ? "Limite cartelle raggiunto"
-                  : room.ticketCost === 0
-                    ? `Blocca ${purchaseQty} ${purchaseQty === 1 ? "cartella" : "cartelle"} gratis`
-                    : `${timeline.phase === "waiting" ? "Acquista" : "Prenota"} ${purchaseQty} ${purchaseQty === 1 ? "cartella" : "cartelle"} · ${totalCost}T`}
+              {isGuest
+                ? `Accedi per giocare · ${purchaseQty} ${purchaseQty === 1 ? "cartella" : "cartelle"}`
+                : timeline.phase === "finished"
+                  ? "Turno in chiusura"
+                  : availableSlots === 0
+                    ? "Limite cartelle raggiunto"
+                    : room.ticketCost === 0
+                      ? `Blocca ${purchaseQty} ${purchaseQty === 1 ? "cartella" : "cartelle"} gratis`
+                      : `${timeline.phase === "waiting" ? "Acquista" : "Prenota"} ${purchaseQty} ${purchaseQty === 1 ? "cartella" : "cartelle"} · ${totalCost}T`}
             </button>
           </div>
 
           {room.ticketCost > 0 && tickets < room.ticketCost && (
             <button
               type="button"
-              onClick={() => void navigate({ to: "/shop" })}
+              onClick={() => navigateWithStop("/shop")}
               className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 py-3 text-sm font-bold text-white/75"
             >
               <ShoppingCart className="h-4 w-4" /> Ticket insufficienti? Vai allo shop
@@ -708,7 +1091,7 @@ function BingoPage() {
                 Continua
               </button>
               <button
-                onClick={() => void navigate({ to: "/lobby" })}
+                onClick={() => navigateWithStop("/lobby")}
                 className="rounded-2xl bg-gold-shine px-6 py-3 font-extrabold text-purple-deep shadow-button-gold active:scale-95"
               >
                 Torna alla Lobby
@@ -767,10 +1150,11 @@ function BingoPage() {
                     value={chatInput}
                     onChange={(e) => setChatInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && sendChat()}
-                    placeholder="Scrivi un messaggio..."
-                    className="min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-white/35"
+                    placeholder={isGuest ? "Accedi per scrivere in chat..." : "Scrivi un messaggio..."}
+                    disabled={isGuest}
+                    className="min-w-0 flex-1 bg-transparent text-sm font-bold text-white outline-none placeholder:text-white/35 disabled:cursor-not-allowed disabled:opacity-40"
                   />
-                  <button type="button" onClick={sendChat} className="flex h-9 w-9 items-center justify-center rounded-full bg-gold-shine text-purple-deep shadow-button-gold active:scale-90">
+                  <button type="button" onClick={sendChat} disabled={!isGuest && !chatInput.trim()} className="flex h-9 w-9 items-center justify-center rounded-full bg-gold-shine text-purple-deep shadow-button-gold active:scale-90 disabled:cursor-not-allowed disabled:opacity-50">
                     <Send className="h-4 w-4" />
                   </button>
                 </div>
@@ -800,25 +1184,45 @@ function BingoCardPanel({
   glowColor,
   isInteractive,
   subtitle,
+  bestLabel,
+  isBest,
+  bestLineIndices,
   onMark,
 }: {
-  entry: DisplayCard;
+  entry: CardInsight;
   index: number;
   total: number;
   size: 3 | 5;
   glowColor: string;
   isInteractive: boolean;
   subtitle: string;
+  bestLabel: string;
+  isBest: boolean;
+  bestLineIndices: number[];
   onMark: (slot: number, n: number) => void;
 }) {
+  const bestLineSet = new Set(bestLineIndices);
+
   return (
-    <div className="min-w-[85%] snap-center rounded-3xl border border-white/10 bg-black/20 p-3 shadow-card-game">
-      <div className="mb-3 flex items-center justify-between gap-2">
+    <div className="rounded-3xl border border-white/10 bg-black/20 p-3 shadow-card-game">
+      <div className="mb-3 flex items-start justify-between gap-2">
         <div>
-          <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-gold">Cartella #{index + 1}</p>
-          <p className="text-[11px] font-bold text-white/55">{subtitle}</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-gold">Cartella #{index + 1}</p>
+            {isBest ? (
+              <span className="rounded-full border border-cyan-300/35 bg-cyan-400/12 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.12em] text-cyan-100">
+                Best focus
+              </span>
+            ) : null}
+          </div>
+          <p className="mt-1 text-[11px] font-bold text-white/55">{subtitle}</p>
         </div>
-        {total > 1 && <span className="rounded-full bg-white/10 px-2 py-1 text-[10px] font-extrabold text-white/65">{index + 1}/{total}</span>}
+        <div className="flex flex-col items-end gap-1 text-right">
+          <span className="rounded-full border border-gold/35 bg-gold/10 px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-gold">
+            {bestLabel}
+          </span>
+          {total > 1 ? <span className="text-[10px] font-extrabold text-white/55">{index + 1}/{total}</span> : null}
+        </div>
       </div>
 
       <div
@@ -831,6 +1235,7 @@ function BingoCardPanel({
         {entry.card.map((n, i) => {
           const isFree = n === 0;
           const isMarked = isFree || entry.markedSet.has(n);
+          const isPriority = bestLineSet.has(i);
           const palette = CELL_PALETTE[i % CELL_PALETTE.length];
 
           return (
@@ -840,12 +1245,14 @@ function BingoCardPanel({
               onClick={() => onMark(entry.slot, n)}
               className={`relative flex aspect-square items-center justify-center rounded-xl bg-gradient-to-br text-sm font-extrabold shadow-md transition-all select-none ${
                 isFree ? "from-gold to-[oklch(0.7_0.25_25)] text-white" : palette
-              } ${isInteractive ? (isMarked ? "opacity-100 ring-2 ring-white/60 scale-105" : "opacity-75") : "opacity-90"}`}
+              } ${isInteractive ? (isMarked ? "opacity-100 ring-2 ring-white/60 scale-105" : "opacity-75") : "opacity-90"} ${
+                isPriority && !isMarked ? "ring-2 ring-cyan-200/70" : ""
+              }`}
               style={
-                isInteractive && isMarked && !isFree
+                (isInteractive && isMarked && !isFree) || isPriority
                   ? {
-                      boxShadow: `0 0 12px ${glowColor}`,
-                      filter: "brightness(1.15)",
+                      boxShadow: `0 0 12px ${isPriority ? "oklch(0.78 0.16 230 / 0.75)" : glowColor}`,
+                      filter: isInteractive && isMarked ? "brightness(1.15)" : "brightness(1.02)",
                     }
                   : undefined
               }
@@ -856,10 +1263,22 @@ function BingoCardPanel({
                   <span className="h-full w-full rounded-xl bg-white/20" />
                 </span>
               )}
+              {!isMarked && isPriority && (
+                <span className="absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-cyan-200 shadow-[0_0_10px_oklch(0.78_0.16_230/0.9)]" />
+              )}
             </motion.button>
           );
         })}
       </div>
+    </div>
+  );
+}
+
+function PremiumMetric({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-center">
+      <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/40">{title}</p>
+      <p className="mt-1 text-sm font-extrabold text-white">{value}</p>
     </div>
   );
 }

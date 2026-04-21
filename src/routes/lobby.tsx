@@ -13,7 +13,7 @@ import { simulatedPlayerCount, recentBotWins, BOTS } from "@/lib/bots";
 export const Route = createFileRoute("/lobby")({
   head: () => ({
     meta: [
-      { title: "Golden Room — Lobby" },
+      { title: "GameSpark — Lobby" },
       { name: "description", content: "Scegli la tua bingo room: VIP, Hot, Free e nuove room ogni giorno." },
     ],
   }),

@@ -22,19 +22,19 @@ export function PwaInstallBanner() {
       case "native":
         return {
           kicker: "Scarica la app",
-          title: "Installa Golden Room sul telefono",
+          title: "Installa GameSpark sul telefono",
           body: "Accesso rapido dalla home, esperienza full screen e lobby più fluida.",
         };
       case "ios":
         return {
           kicker: "Aggiungi alla Home",
-          title: "Installa Golden Room su iPhone",
+          title: "Installa GameSpark su iPhone",
           body: "Apri il menu Condividi di Safari e aggiungi la app alla schermata Home.",
         };
       case "android-manual":
         return {
           kicker: "Aggiungi alla Home",
-          title: "Installa Golden Room da Chrome",
+          title: "Installa GameSpark da Chrome",
           body: "Se il popup non parte da solo, apri il menu ⋮ di Chrome e tocca “Installa app”.",
         };
       case "android-https":
@@ -45,7 +45,7 @@ export function PwaInstallBanner() {
         };
       default:
         return {
-          kicker: "Golden Room",
+          kicker: "GameSpark",
           title: "Apri la app dalla Home",
           body: "Installa o aggiungi il collegamento per entrare più velocemente.",
         };

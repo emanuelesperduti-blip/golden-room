@@ -13,8 +13,8 @@ import { resetPwaBannerDismissal } from "@/hooks/usePwaInstall";
 export const Route = createFileRoute("/profile")({
   head: () => ({
     meta: [
-      { title: "Golden Room — Profilo" },
-      { name: "description", content: "Il tuo profilo, badge, streak e progressione in Golden Room." },
+      { title: "GameSpark — Profilo" },
+      { name: "description", content: "Il tuo profilo, badge, streak e progressione in GameSpark." },
     ],
   }),
   component: ProfilePage,

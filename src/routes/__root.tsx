@@ -26,13 +26,13 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Golden Room — Bingo & Reveal" },
-      { name: "description", content: "Golden Room: reveal premium, bingo live, missioni, badge e Spark. La tua app casual game brillante." },
+      { title: "GameSpark — Bingo & Reveal" },
+      { name: "description", content: "GameSpark: bingo live, lobby premium, missioni, badge e Spark. La tua app casual game pronta per il pubblico." },
       { name: "theme-color", content: "#2a1240" },
       { name: "mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-capable", content: "yes" },
       { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
-      { property: "og:title", content: "Golden Room — Bingo & Reveal" },
+      { property: "og:title", content: "GameSpark — Bingo & Reveal" },
       { property: "og:type", content: "website" },
     ],
     links: [

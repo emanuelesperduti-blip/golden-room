@@ -53,16 +53,14 @@ export function TopBar() {
             sfx("tap");
             setTheme(isOcean ? "royale" : "ocean");
           }}
-          className={`flex items-center gap-1 rounded-full border px-2.5 py-1 text-[11px] font-extrabold transition active:scale-95 ${
+          className={`flex h-7 w-7 items-center justify-center rounded-full border transition active:scale-90 ${
             isOcean
               ? "border-cyan-300/35 bg-cyan-400/10 text-cyan-100"
               : "border-fuchsia-300/35 bg-fuchsia-400/10 text-fuchsia-100"
           }`}
-          aria-label="Cambia tema"
-          title={isOcean ? "Passa a Royal Neon" : "Passa a Ocean Glow"}
+          aria-label={isOcean ? "Passa a Royal Neon" : "Passa a Ocean Glow"}
         >
           <Palette className="h-3.5 w-3.5" />
-          {isOcean ? "Ocean" : "Royal"}
         </button>
 
         {vip && (
@@ -84,6 +82,7 @@ export function TopBar() {
             sfx("tap");
             toggleMute();
           }}
+          aria-label={muted ? "Attiva effetti audio" : "Disattiva effetti audio"}
           className="flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white/70 active:scale-90"
         >
           {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
@@ -95,6 +94,7 @@ export function TopBar() {
             if (musicMuted) startMusic();
             else stopMusic();
           }}
+          aria-label={musicMuted ? "Attiva musica" : "Disattiva musica"}
           className="flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white/70 active:scale-90"
         >
           {musicMuted ? <Music2 className="h-3.5 w-3.5 opacity-40" /> : <Music className="h-3.5 w-3.5 text-gold" />}

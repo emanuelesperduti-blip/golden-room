@@ -5,12 +5,19 @@ type BeforeInstallPromptEvent = Event & {
   userChoice: Promise<{ outcome: "accepted" | "dismissed"; platform: string }>;
 };
 
-const DISMISS_KEY = "golden-room-pwa-dismissed";
-const RESET_EVENT = "golden-room:pwa-reset-banner";
+const DISMISS_KEY = "gamespark-pwa-dismissed";
+const LEGACY_DISMISS_KEY = "golden-room-pwa-dismissed";
+const RESET_EVENT = "gamespark:pwa-reset-banner";
+
+function clearDismissFlags() {
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(DISMISS_KEY);
+  window.localStorage.removeItem(LEGACY_DISMISS_KEY);
+}
 
 export function resetPwaBannerDismissal() {
   if (typeof window === "undefined") return;
-  window.localStorage.removeItem(DISMISS_KEY);
+  clearDismissFlags();
   window.dispatchEvent(new Event(RESET_EVENT));
 }
 
@@ -42,7 +49,9 @@ export function usePwaInstall() {
     setIsAndroid(android);
     setIsMobile(mobile);
     setIsSecureContextState(secure);
-    setDismissed(window.localStorage.getItem(DISMISS_KEY) === "1");
+    setDismissed(
+      window.localStorage.getItem(DISMISS_KEY) === "1" || window.localStorage.getItem(LEGACY_DISMISS_KEY) === "1",
+    );
 
     const onBeforeInstallPrompt = (event: Event) => {
       event.preventDefault();
@@ -52,12 +61,12 @@ export function usePwaInstall() {
     const onInstalled = () => {
       setIsInstalled(true);
       setDeferredPrompt(null);
-      window.localStorage.removeItem(DISMISS_KEY);
+      clearDismissFlags();
       setDismissed(false);
     };
 
     const onReset = () => {
-      window.localStorage.removeItem(DISMISS_KEY);
+      clearDismissFlags();
       setDismissed(false);
     };
 
@@ -96,7 +105,7 @@ export function usePwaInstall() {
     const accepted = choice.outcome === "accepted";
     if (accepted) {
       setIsInstalled(true);
-      window.localStorage.removeItem(DISMISS_KEY);
+      clearDismissFlags();
       setDismissed(false);
     }
     setDeferredPrompt(null);
@@ -106,6 +115,7 @@ export function usePwaInstall() {
   function dismiss() {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(DISMISS_KEY, "1");
+      window.localStorage.removeItem(LEGACY_DISMISS_KEY);
     }
     setDismissed(true);
   }

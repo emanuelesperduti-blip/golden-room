@@ -1,13 +1,14 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect } from "react";
-import { Mail, Lock, User, Eye, EyeOff, ArrowLeft, Chrome } from "lucide-react";
+import { Mail, Lock, User, Eye, EyeOff, ArrowLeft } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { clearAuthRedirect, getAuthRedirect } from "@/lib/authRedirect";
 import heroOrb from "@/assets/hero-orb.png";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
-    meta: [{ title: "Golden Room — Accedi" }],
+    meta: [{ title: "GameSpark — Accedi" }],
   }),
   component: AuthPage,
 });
@@ -26,7 +27,14 @@ function AuthPage() {
 
   // Redirect if already logged in
   useEffect(() => {
-    if (user) void navigate({ to: "/" });
+    if (!user) return;
+    const redirect = getAuthRedirect();
+    clearAuthRedirect();
+    if (redirect) {
+      window.location.assign(redirect);
+      return;
+    }
+    void navigate({ to: "/" });
   }, [user, navigate]);
 
   async function handleEmail() {
@@ -35,7 +43,12 @@ function AuthPage() {
     if (mode === "login") {
       const { error: err } = await signInWithEmail(email, password);
       if (err) setError(err);
-      else void navigate({ to: "/" });
+      else {
+        const redirect = getAuthRedirect();
+        clearAuthRedirect();
+        if (redirect) window.location.assign(redirect);
+        else void navigate({ to: "/" });
+      }
     } else {
       if (!name.trim()) { setError("Inserisci il tuo nome"); setLoading(false); return; }
       const { error: err } = await signUpWithEmail(email, password, name);
@@ -66,9 +79,17 @@ function AuthPage() {
 
       <div className="relative w-full max-w-sm px-4 py-8">
         {/* Back to guest mode */}
-        <Link to="/" className="mb-6 flex items-center gap-2 text-sm font-bold text-white/50 hover:text-white/80 transition">
+        <button
+          type="button"
+          onClick={() => {
+            const redirect = getAuthRedirect();
+            clearAuthRedirect();
+            window.location.assign(redirect ?? "/");
+          }}
+          className="mb-6 flex items-center gap-2 text-sm font-bold text-white/50 hover:text-white/80 transition"
+        >
           <ArrowLeft className="h-4 w-4" /> Continua come ospite
-        </Link>
+        </button>
 
         {/* Header */}
         <div className="mb-8 text-center">
@@ -77,7 +98,7 @@ function AuthPage() {
             animate={{ y: [0, -6, 0], rotate: [-2, 2, -2] }}
             transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
           />
-          <h1 className="mt-4 text-stroke-game text-3xl font-extrabold text-gold">Golden Room</h1>
+          <h1 className="mt-4 text-stroke-game text-3xl font-extrabold text-gold">GameSpark</h1>
           <p className="mt-1 text-sm font-bold text-white/60">
             {mode === "login" ? "Bentornato! Accedi al tuo account" : "Crea il tuo account gratuito"}
           </p>
@@ -225,7 +246,7 @@ function AuthPage() {
         </motion.div>
 
         <p className="mt-4 text-center text-[10px] text-white/30">
-          Accedendo accetti i Termini di Servizio e la Privacy Policy di Golden Room.
+          Accedendo accetti i Termini di Servizio e la Privacy Policy di GameSpark.
         </p>
       </div>
     </div>

@@ -1,4 +1,4 @@
-const CACHE_NAME = "golden-room-v1";
+const CACHE_NAME = "gamespark-v2";
 const APP_SHELL = [
   "/",
   "/manifest.webmanifest",
