@@ -35,6 +35,7 @@ const AVATAR_OPTIONS = ["👑", "🎰", "🃏", "🦁", "🐯", "🦊", "🐸", 
 function ProfilePage() {
   const { user, signOut } = useAuth();
   const {
+    isGuest,
     username,
     avatar: avatarEmoji,
     level,
@@ -45,14 +46,18 @@ function ProfilePage() {
     tickets,
     vip,
     rank,
+    bingosWon,
+    revealsOpened,
+    roundsPlayed,
   } = useViewerGameState();
   const missions = useGameStore((s) => s.missions);
   const theme = useGameStore((s) => s.theme);
   const setTheme = useGameStore((s) => s.setTheme);
 
   const storeState = useGameStore.getState();
-  const unlockedCount = BADGES_CONFIG.filter((b) => b.req(storeState)).length;
-  const completedMissions = Object.values(missions).filter((m) => m.claimed).length;
+  const badgeState = isGuest ? { ...storeState, streak, vip, bingosWon, revealsOpened, roundsPlayed } : storeState;
+  const unlockedCount = BADGES_CONFIG.filter((b) => b.req(badgeState)).length;
+  const completedMissions = isGuest ? 0 : Object.values(missions).filter((m) => m.claimed).length;
   const xpInLevel = xp % 100;
 
   const [editingName, setEditingName] = useState(false);
@@ -234,7 +239,7 @@ function ProfilePage() {
         <SectionLabel>Badge ({unlockedCount}/{BADGES_CONFIG.length})</SectionLabel>
         <div className="mt-3 grid grid-cols-3 gap-3">
           {BADGES_CONFIG.map(({ name, icon: Icon, color, req }) => {
-            const unlocked = req(storeState);
+            const unlocked = req(badgeState);
             return (
               <motion.div
                 key={name}

@@ -13,6 +13,9 @@ const GUEST_VALUES = {
   xp: 0,
   premiumRevealsLeft: 0,
   rank: 0,
+  bingosWon: 0,
+  revealsOpened: 0,
+  roundsPlayed: 0,
 };
 
 export function useViewerGameState() {
@@ -32,6 +35,9 @@ export function useViewerGameState() {
   const xp = useGameStore((s) => s.xp);
   const premiumRevealsLeft = useGameStore((s) => s.premiumRevealsLeft);
   const rank = useGameStore((s) => s.rank);
+  const bingosWon = useGameStore((s) => s.bingosWon);
+  const revealsOpened = useGameStore((s) => s.revealsOpened);
+  const roundsPlayed = useGameStore((s) => s.roundsPlayed);
 
   return {
     isGuest,
@@ -48,5 +54,8 @@ export function useViewerGameState() {
     xp: isGuest ? GUEST_VALUES.xp : xp,
     premiumRevealsLeft: isGuest ? GUEST_VALUES.premiumRevealsLeft : premiumRevealsLeft,
     rank: isGuest ? GUEST_VALUES.rank : rank,
+    bingosWon: isGuest ? GUEST_VALUES.bingosWon : bingosWon,
+    revealsOpened: isGuest ? GUEST_VALUES.revealsOpened : revealsOpened,
+    roundsPlayed: isGuest ? GUEST_VALUES.roundsPlayed : roundsPlayed,
   };
 }
