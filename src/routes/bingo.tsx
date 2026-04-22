@@ -155,7 +155,6 @@ function BingoPage() {
   const [chatOpen, setChatOpen] = useState(false);
   const [showWin, setShowWin] = useState(false);
   const [winnerName, setWinnerName] = useState<string | null>(null);
-  const [focusedCardKey, setFocusedCardKey] = useState<string | null>(null);
   const [guestNotice, setGuestNotice] = useState<string | null>(null);
   const [pageVisible, setPageVisible] = useState(() => typeof document === "undefined" || document.visibilityState === "visible");
   const [chat, setChat] = useState<ChatItem[]>([
@@ -165,6 +164,7 @@ function BingoPage() {
   ]);
 
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const cardsScrollRef = useRef<HTMLDivElement>(null);
   const botEngineRef = useRef<BotChatEngine | null>(null);
   const spokenDrawRef = useRef<string | null>(null);
   const playedRoundRef = useRef<number | null>(null);
@@ -177,6 +177,7 @@ function BingoPage() {
   const currentRoundIndex = timeline.activeRoundIndex;
   const upcomingRoundIndex = timeline.upcomingRoundIndex;
   const maxCards = maxCardsPerRoom(room);
+  const effectiveCardSize = room.id === "golden-city" ? 4 : effectiveCardSize;
   const isGuest = !user;
 
   const drawOrder = useMemo(() => drawOrderForRound(room, currentRoundIndex), [room, currentRoundIndex]);
@@ -219,16 +220,9 @@ function BingoPage() {
     () =>
       visibleCards.map((entry) => ({
         ...entry,
-        ...analyzeCard(entry.card, entry.markedSet, room.cardSize),
+        ...analyzeCard(entry.card, entry.markedSet, effectiveCardSize),
       })),
-    [visibleCards, room.cardSize],
-  );
-  const autoFeaturedKey = useMemo(
-    () =>
-      deckCards.length > 0
-        ? [...deckCards].sort((a, b) => a.bestMissing - b.bestMissing || b.matchedInBestLine - a.matchedInBestLine || a.slot - b.slot)[0].key
-        : null,
-    [deckCards],
+    [visibleCards, effectiveCardSize],
   );
   const isLateEntry = timeline.phase === "playing" && currentCards.length === 0;
   const finishedWinner = winnerName ?? botWinner.name;
@@ -272,22 +266,8 @@ function BingoPage() {
       : timeline.phase === "playing"
         ? "PARTITA IN CORSO"
         : "FINE PARTITA";
-  const featuredCard = deckCards.find((entry) => entry.key === focusedCardKey) ?? deckCards[0] ?? null;
-  const featuredCardIndex = featuredCard ? deckCards.findIndex((entry) => entry.key === featuredCard.key) : -1;
-  const bestCard = deckCards.find((entry) => entry.key === autoFeaturedKey) ?? null;
-  const featuredCardLabel = featuredCard ? missingLabel(featuredCard.bestMissing, featuredCard.completedLines) : null;
-  const urgentCards = deckCards.filter((entry) => entry.bestMissing <= 2).length;
+  const bestCard = deckCards.length > 0 ? [...deckCards].sort((a, b) => a.bestMissing - b.bestMissing || b.matchedInBestLine - a.matchedInBestLine || a.slot - b.slot)[0] : null;
 
-  useEffect(() => {
-    if (deckCards.length === 0) {
-      if (focusedCardKey != null) setFocusedCardKey(null);
-      return;
-    }
-
-    if (!focusedCardKey || !deckCards.some((entry) => entry.key === focusedCardKey)) {
-      setFocusedCardKey(autoFeaturedKey);
-    }
-  }, [deckCards, focusedCardKey, autoFeaturedKey]);
 
   useEffect(() => {
     if (!guestNotice) return;
@@ -452,10 +432,10 @@ function BingoPage() {
   }, [pageVisible, drawnNumber, currentRoundIndex, currentReservations.length, room, playerSeed, sfx, speakNumber]);
 
   useEffect(() => {
-    if (timeline.phase !== "playing" || drawCount < room.cardSize) return;
+    if (timeline.phase !== "playing" || drawCount < effectiveCardSize) return;
     if (bingoRewardedRoundRef.current === currentRoundIndex) return;
 
-    const winnerCard = currentCards.find((entry) => checkBingo(entry.card, entry.markedSet, room.cardSize));
+    const winnerCard = currentCards.find((entry) => checkBingo(entry.card, entry.markedSet, effectiveCardSize));
     if (!winnerCard) return;
 
     bingoRewardedRoundRef.current = currentRoundIndex;
@@ -472,7 +452,7 @@ function BingoPage() {
       origin: { y: 0.55 },
       colors: ["#ff3da6", "#f5b400", "#7c3aed", "#22d3ee", "#34d399"],
     });
-  }, [currentCards, timeline.phase, drawCount, room.cardSize, currentRoundIndex, username, sfx, addSparks, addTickets, incrementBingosWon, room.sparkReward, room.ticketReward]);
+  }, [currentCards, timeline.phase, drawCount, effectiveCardSize, currentRoundIndex, username, sfx, addSparks, addTickets, incrementBingosWon, room.sparkReward, room.ticketReward]);
 
   useEffect(() => {
     if (timeline.phase === "finished" && winnerName == null) {
@@ -492,6 +472,13 @@ function BingoPage() {
     const nextMax = Math.max(1, affordableSlots || (room.ticketCost === 0 ? Math.max(1, availableSlots) : 1));
     setPurchaseQty((prev) => Math.max(1, Math.min(prev, nextMax)));
   }, [affordableSlots, availableSlots, room.ticketCost]);
+
+  function scrollCards(direction: "left" | "right") {
+    const el = cardsScrollRef.current;
+    if (!el) return;
+    const amount = Math.max(220, Math.floor(el.clientWidth * 0.88));
+    el.scrollBy({ left: direction === "left" ? -amount : amount, behavior: "smooth" });
+  }
 
   function handleMark(cardSlot: number, n: number) {
     if (isGuest) {
@@ -737,111 +724,71 @@ function BingoPage() {
         </div>
       </div>
 
-      <section className="relative z-10 mt-4 px-2">
-        <div className="overflow-hidden rounded-[1.75rem] border border-white/12 bg-[linear-gradient(180deg,oklch(0.28_0.14_305/0.95),oklch(0.18_0.1_300/0.98))] p-3 shadow-card-game">
+      <section className="relative z-10 mt-4 px-4">
+        <div className="overflow-hidden rounded-[1.75rem] border border-white/12 bg-[linear-gradient(180deg,oklch(0.28_0.14_305/0.95),oklch(0.18_0.1_300/0.98))] p-4 shadow-card-game">
           {deckCards.length > 0 ? (
             <>
-              <div className="mb-3 flex items-start justify-between gap-2">
+              <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-gold">
-                    {activeCards.length > 0 ? "Multi-cartella premium" : timeline.phase === "waiting" ? "Deck pronto" : "Deck prenotato"}
+                    {activeCards.length > 0 ? "Cartelle attive" : timeline.phase === "waiting" ? "Cartelle prenotate" : "Cartelle del prossimo turno"}
                   </p>
                   <p className="text-[11px] font-bold text-white/60">
-                    {activeCards.length > 0
-                      ? `Stai giocando con ${activeCards.length} ${activeCards.length === 1 ? "cartella" : "cartelle"}. La migliore viene evidenziata automaticamente.`
-                      : `Hai ${deckCards.length} ${deckCards.length === 1 ? "cartella" : "cartelle"} bloccate e pronte per il prossimo turno.`}
+                    {deckCards.length === 1
+                      ? "La tua cartella del round è qui sotto."
+                      : `Hai ${deckCards.length} cartelle. Scorri a destra e sinistra per vederle tutte.`}
                   </p>
                 </div>
-                <div className="flex flex-col items-end gap-1 text-right">
-                  {bestCard && (
-                    <span className="rounded-full border border-gold/35 bg-gold/10 px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-gold">
-                      {missingLabel(bestCard.bestMissing, bestCard.completedLines)}
-                    </span>
-                  )}
-                  {bestCard && featuredCard && bestCard.key !== featuredCard.key && (
+                {deckCards.length > 1 ? (
+                  <div className="flex items-center gap-2">
                     <button
                       type="button"
-                      onClick={() => {
-                        sfx("tap");
-                        setFocusedCardKey(bestCard.key);
-                      }}
-                      className="rounded-full border border-cyan-300/30 bg-cyan-400/10 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-cyan-100"
+                      onClick={() => scrollCards("left")}
+                      className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-black/20 text-white active:scale-95"
+                      aria-label="Scorri cartelle a sinistra"
                     >
-                      Vai alla migliore
+                      <ArrowLeft className="h-4 w-4" />
                     </button>
-                  )}
-                </div>
+                    <button
+                      type="button"
+                      onClick={() => scrollCards("right")}
+                      className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-black/20 text-white active:scale-95"
+                      aria-label="Scorri cartelle a destra"
+                    >
+                      <ArrowLeft className="h-4 w-4 rotate-180" />
+                    </button>
+                  </div>
+                ) : null}
               </div>
 
-              {deckCards.length > 1 && (
-                <div className="no-scrollbar mb-3 flex gap-2 overflow-x-auto pb-1">
-                  {deckCards.map((entry, idx) => {
-                    const label = missingLabel(entry.bestMissing, entry.completedLines);
-                    const isFocused = featuredCard?.key === entry.key;
-                    const isBest = bestCard?.key === entry.key;
-
-                    return (
-                      <button
-                        key={`${entry.key}-switch`}
-                        type="button"
-                        onClick={() => {
-                          sfx("tap");
-                          setFocusedCardKey(entry.key);
-                        }}
-                        className={`min-w-[112px] rounded-2xl border px-3 py-2 text-left transition-all active:scale-95 ${
-                          isFocused
-                            ? "border-gold/55 bg-gold/12 shadow-[0_0_0_1px_oklch(0.85_0.18_90/0.25)]"
-                            : "border-white/10 bg-black/20"
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-xs font-extrabold text-white">#{idx + 1}</span>
-                          {isBest ? (
-                            <span className="rounded-full bg-cyan-400/15 px-1.5 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.12em] text-cyan-100">
-                              Best
-                            </span>
-                          ) : null}
-                        </div>
-                        <p className="mt-1 text-[11px] font-extrabold text-gold">{label}</p>
-                        <p className="mt-0.5 text-[10px] font-bold text-white/45">slot {entry.slot + 1}</p>
-                      </button>
-                    );
-                  })}
-                </div>
-              )}
-
-              {featuredCard && (
-                <>
-                  <BingoCardPanel
-                    entry={featuredCard}
-                    index={featuredCardIndex >= 0 ? featuredCardIndex : 0}
-                    total={deckCards.length}
-                    size={room.cardSize}
-                    glowColor={glowColor}
-                    isInteractive={timeline.phase === "playing" && featuredCard.roundIndex === currentRoundIndex}
-                    subtitle={
-                      timeline.phase === "playing" && featuredCard.roundIndex === currentRoundIndex
-                        ? "Cartella in focus per la partita in corso"
-                        : featuredCard.roundIndex === currentRoundIndex
-                          ? "Sarà attiva allo start del round"
-                          : "Valida per il prossimo turno"
-                    }
-                    bestLabel={featuredCardLabel ?? "Deck pronto"}
-                    isBest={bestCard?.key === featuredCard.key}
-                    bestLineIndices={featuredCard.bestLineIndices}
-                    onMark={handleMark}
-                  />
-
-                  <div className="mt-3 grid grid-cols-3 gap-2">
-                    <PremiumMetric
-                      title="Focus"
-                      value={bestCard?.key === featuredCard.key ? "Auto best" : `Deck #${featuredCardIndex + 1}`}
+              <div
+                ref={cardsScrollRef}
+                className="no-scrollbar -mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-1"
+              >
+                {deckCards.map((entry, idx) => (
+                  <div key={entry.key} className="min-w-full snap-center">
+                    <BingoCardPanel
+                      entry={entry}
+                      index={idx}
+                      total={deckCards.length}
+                      size={effectiveCardSize}
+                      glowColor={glowColor}
+                      isInteractive={timeline.phase === "playing" && entry.roundIndex === currentRoundIndex}
+                      subtitle={
+                        timeline.phase === "playing" && entry.roundIndex === currentRoundIndex
+                          ? "Cartella in focus per la partita in corso"
+                          : entry.roundIndex === currentRoundIndex
+                            ? "Sarà attiva allo start del round"
+                            : "Valida per il prossimo turno"
+                      }
+                      bestLabel={missingLabel(entry.bestMissing, entry.completedLines)}
+                      isBest={bestCard?.key === entry.key}
+                      bestLineIndices={entry.bestLineIndices}
+                      onMark={handleMark}
                     />
-                    <PremiumMetric title="Vicine al bingo" value={urgentCards > 0 ? `${urgentCards}/${deckCards.length}` : "0"} />
-                    <PremiumMetric title="Linee chiuse" value={`${featuredCard.completedLines}`} />
                   </div>
-                </>
-              )}
+                ))}
+              </div>
             </>
           ) : (
             <div className="flex min-h-[240px] flex-col items-center justify-center px-4 text-center">
@@ -862,7 +809,6 @@ function BingoPage() {
           )}
         </div>
       </section>
-
 
       <section className="relative z-10 mt-4 px-4">
         <div className="grid grid-cols-2 gap-2">
@@ -1172,7 +1118,7 @@ function BingoCardPanel({
   onMark: (slot: number, n: number) => void;
 }) {
   const bestLineSet = new Set(bestLineIndices);
-  const cardMaxWidth = size === 4 ? 272 : size === 5 ? 292 : 246;
+  const cardMaxWidth = size === 4 ? 320 : size === 5 ? 300 : 246;
 
   return (
     <div className="rounded-3xl border border-white/10 bg-black/20 p-3 shadow-card-game">
@@ -1201,43 +1147,32 @@ function BingoCardPanel({
           style={{
             display: "grid",
             gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))`,
-            gap: size === 4 ? "6px" : "5px",
+            gap: size === 4 ? "8px" : "6px",
           }}
         >
           {entry.card.map((n, i) => {
             const isMarked = n !== 0 && entry.markedSet.has(n);
             const isPriority = bestLineSet.has(i);
+            void isPriority;
 
             return (
               <motion.button
                 key={`${entry.key}-${i}`}
                 whileTap={{ scale: isInteractive ? 0.96 : 1 }}
                 onClick={() => onMark(entry.slot, n)}
-                className={`relative flex aspect-square items-center justify-center rounded-lg border text-[18px] font-extrabold transition-all select-none ${
+                className={`relative flex aspect-square min-h-[64px] items-center justify-center rounded-[16px] border text-[16px] font-extrabold transition-all select-none ${
                   isMarked
-                    ? "border-gold/70 bg-gold-shine text-purple-deep shadow-[0_0_14px_oklch(0.85_0.18_90/0.45)]"
-                    : "border-white/35 bg-white text-[oklch(0.2_0.02_280)]"
-                } ${isInteractive ? "active:scale-95" : ""} ${isPriority && !isMarked ? "ring-1 ring-cyan-200/60" : ""}`}
+                    ? "border-gold/80 bg-gold-shine text-purple-deep shadow-[0_0_14px_oklch(0.85_0.18_90/0.45)]"
+                    : "border-white/45 bg-white text-[oklch(0.2_0.02_280)]"
+                } ${isInteractive ? "active:scale-95" : ""}`}
                 style={isMarked ? { boxShadow: `0 0 14px ${glowColor}` } : undefined}
               >
                 <span className="leading-none">{n}</span>
-                {!isMarked && isPriority && (
-                  <span className="absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-cyan-200 shadow-[0_0_8px_oklch(0.78_0.16_230/0.75)]" />
-                )}
               </motion.button>
             );
           })}
         </div>
       </div>
-    </div>
-  );
-}
-
-function PremiumMetric({ title, value }: { title: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 px-3 py-2 text-center">
-      <p className="text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/40">{title}</p>
-      <p className="mt-1 text-sm font-extrabold text-white">{value}</p>
     </div>
   );
 }
