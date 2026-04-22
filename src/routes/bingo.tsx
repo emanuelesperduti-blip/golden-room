@@ -19,10 +19,6 @@ import {
 import { z } from "zod";
 import { MobileShell } from "@/components/game/MobileShell";
 import bingoBall from "@/assets/bingo-ball-empty.png";
-import sideHearts from "@/assets/side-hearts.png";
-import sideGift from "@/assets/side-gift.png";
-import sideTrophy from "@/assets/side-trophy.png";
-import sideGiftBlue from "@/assets/side-gift-blue.png";
 import { cardForRound, drawOrderForRound, getRoom, getRoomTimeline, maxCardsPerRoom } from "@/lib/rooms";
 import { useGameStore } from "@/lib/gameStore";
 import { useAudio } from "@/hooks/useAudio";
@@ -821,13 +817,8 @@ function BingoPage() {
         </section>
       ) : null}
 
-      <section className="relative z-10 mt-4 flex items-start gap-2 px-2">
-        <div className="flex flex-col gap-2 pt-2">
-          <SideBtn img={sideHearts} onClick={() => { sfx("tap"); navigateWithStop(isGuest ? "/auth" : "/missions"); }} label={isGuest ? "login" : "missioni"} />
-          <SideBtn img={sideGift} onClick={() => { sfx("tap"); navigateWithStop("/reveal"); }} label="reveal" />
-        </div>
-
-        <div className="flex-1 overflow-hidden rounded-[1.75rem] border border-white/12 bg-[linear-gradient(180deg,oklch(0.28_0.14_305/0.95),oklch(0.18_0.1_300/0.98))] p-3 shadow-card-game">
+      <section className="relative z-10 mt-4 px-2">
+        <div className="overflow-hidden rounded-[1.75rem] border border-white/12 bg-[linear-gradient(180deg,oklch(0.28_0.14_305/0.95),oklch(0.18_0.1_300/0.98))] p-3 shadow-card-game">
           {deckCards.length > 0 ? (
             <>
               <div className="mb-3 flex items-start justify-between gap-2">
@@ -949,11 +940,6 @@ function BingoPage() {
               </p>
             </div>
           )}
-        </div>
-
-        <div className="flex flex-col gap-2 pt-2">
-          <SideBtn img={sideTrophy} onClick={() => { sfx("tap"); navigateWithStop("/missions"); }} label="premi" />
-          <SideBtn img={sideGiftBlue} onClick={() => { sfx("tap"); navigateWithStop("/shop"); }} label="shop" />
         </div>
       </section>
 
@@ -1295,15 +1281,3 @@ function StatusCard({ icon, title, value }: { icon: ReactNode; title: string; va
   );
 }
 
-function SideBtn({ img, onClick, label }: { img: string; onClick: () => void; label: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className="flex w-14 flex-col items-center gap-1 rounded-2xl border border-white/10 bg-card-game px-2 py-2 shadow-card-game active:scale-95"
-    >
-      <img src={img} alt="" className="h-10 w-10 object-contain" />
-      <span className="text-[10px] font-extrabold text-white/75">{label}</span>
-    </button>
-  );
-}
