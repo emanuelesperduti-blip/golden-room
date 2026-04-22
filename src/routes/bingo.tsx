@@ -60,23 +60,6 @@ function checkBingo(card: number[], marked: Set<number>, size: number): boolean 
   return false;
 }
 
-const CELL_PALETTE = [
-  "from-[oklch(0.78_0.16_230)] to-[oklch(0.62_0.18_240)] text-white",
-  "from-[oklch(0.7_0.2_300)] to-[oklch(0.55_0.22_310)] text-white",
-  "from-[oklch(0.88_0.18_90)] to-[oklch(0.78_0.2_75)] text-[oklch(0.25_0.05_60)]",
-  "from-white to-[oklch(0.96_0.01_300)] text-[oklch(0.15_0.02_280)]",
-  "from-white to-[oklch(0.96_0.01_300)] text-[oklch(0.15_0.02_280)]",
-  "from-white to-[oklch(0.96_0.01_300)] text-[oklch(0.15_0.02_280)]",
-  "from-white to-[oklch(0.96_0.01_300)] text-[oklch(0.15_0.02_280)]",
-  "from-[oklch(0.88_0.18_90)] to-[oklch(0.78_0.2_75)] text-[oklch(0.25_0.05_60)]",
-  "from-[oklch(0.78_0.18_150)] to-[oklch(0.6_0.2_150)] text-white",
-  "from-white to-[oklch(0.96_0.01_300)] text-[oklch(0.15_0.02_280)]",
-  "from-white to-[oklch(0.96_0.01_300)] text-[oklch(0.15_0.02_280)]",
-  "from-[oklch(0.78_0.16_230)] to-[oklch(0.62_0.18_240)] text-white",
-  "from-white to-[oklch(0.96_0.01_300)] text-[oklch(0.15_0.02_280)]",
-  "from-white to-[oklch(0.96_0.01_300)] text-[oklch(0.15_0.02_280)]",
-  "from-white to-[oklch(0.96_0.01_300)] text-[oklch(0.15_0.02_280)]",
-];
 
 type ChatItem = { user: string; text: string; color: string; avatar: string };
 type PurchasedCardState = { roundIndex: number; slot: number; marked: number[] };
@@ -754,69 +737,6 @@ function BingoPage() {
         </div>
       </div>
 
-      <section className="relative z-10 mt-4 px-4">
-        <div className="grid grid-cols-2 gap-2">
-          <StatusCard icon={<Ticket className="h-4 w-4" />} title="Costo/cartella" value={room.ticketCost === 0 ? "Gratis" : `${room.ticketCost} Ticket`} />
-          <StatusCard icon={<Trophy className="h-4 w-4" />} title="Premio" value={`+${room.sparkReward} Spark`} />
-          <StatusCard icon={<Clock className="h-4 w-4" />} title="Stato" value={timeline.phase === "waiting" ? "Prevendita" : timeline.phase === "playing" ? "Live" : "Chiusura"} />
-          <StatusCard icon={<TimerReset className="h-4 w-4" />} title="Max cartelle" value={`${maxCards} per round`} />
-        </div>
-      </section>
-
-      <section className="relative z-10 mt-3 px-4">
-        <div className="rounded-3xl border border-white/10 bg-card-game p-4 shadow-card-game">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <p className="text-sm font-extrabold text-white">Ultimi esiti room</p>
-              <p className="mt-1 text-[11px] font-bold text-white/55">Stile sala online: countdown solo per il prossimo avvio, vincita validata a parte.</p>
-            </div>
-            <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/55">Storico live</span>
-          </div>
-
-          <div className="mt-3 space-y-2">
-            {recentResults.map(({ roundIndex, winner }) => (
-              <div key={roundIndex} className="flex items-center justify-between gap-3 rounded-2xl border border-white/8 bg-black/20 px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">{winner.avatar}</span>
-                  <div>
-                    <p className="text-xs font-extrabold text-white">Round #{roundIndex + 1}</p>
-                    <p className="text-[11px] font-bold text-white/55">Vincitore validato: {winner.name}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs font-extrabold text-gold">+{room.sparkReward} Spark</p>
-                  <p className="text-[11px] font-bold text-white/55">+{room.ticketReward} Ticket</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {(timeline.phase === "playing" && currentReservations.length === 0) || timeline.phase === "finished" ? (
-        <section className="relative z-10 mt-3 px-4">
-          <div className="rounded-3xl border border-white/10 bg-card-game p-4 shadow-card-game">
-            <div className="flex items-start gap-3">
-              <span className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl bg-black/25 text-gold">
-                <Info className="h-5 w-5" />
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-extrabold text-white">
-                  {timeline.phase === "playing"
-                    ? "Partita in corso, attendi la fine della partita per partecipare al prossimo turno"
-                    : `Turno chiuso. Vincitore: ${finishedWinner}`}
-                </p>
-                <p className="mt-1 text-xs font-bold text-white/60">
-                  {timeline.phase === "playing"
-                    ? "Non vedrai né riceverai cartelle per questa partita. Puoi però prenotare subito più cartelle per il turno successivo."
-                    : "Tra pochi secondi comparirà di nuovo il countdown utile per acquistare le cartelle del turno successivo."}
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-      ) : null}
-
       <section className="relative z-10 mt-4 px-2">
         <div className="overflow-hidden rounded-[1.75rem] border border-white/12 bg-[linear-gradient(180deg,oklch(0.28_0.14_305/0.95),oklch(0.18_0.1_300/0.98))] p-3 shadow-card-game">
           {deckCards.length > 0 ? (
@@ -829,7 +749,7 @@ function BingoPage() {
                   <p className="text-[11px] font-bold text-white/60">
                     {activeCards.length > 0
                       ? `Stai giocando con ${activeCards.length} ${activeCards.length === 1 ? "cartella" : "cartelle"}. La migliore viene evidenziata automaticamente.`
-                      : `Hai ${deckCards.length} ${deckCards.length === 1 ? "cartella" : "cartelle"} bloccate: puoi scorrerle con il mini-switch qui sotto.`}
+                      : `Hai ${deckCards.length} ${deckCards.length === 1 ? "cartella" : "cartelle"} bloccate e pronte per il prossimo turno.`}
                   </p>
                 </div>
                 <div className="flex flex-col items-end gap-1 text-right">
@@ -942,6 +862,70 @@ function BingoPage() {
           )}
         </div>
       </section>
+
+
+      <section className="relative z-10 mt-4 px-4">
+        <div className="grid grid-cols-2 gap-2">
+          <StatusCard icon={<Ticket className="h-4 w-4" />} title="Costo/cartella" value={room.ticketCost === 0 ? "Gratis" : `${room.ticketCost} Ticket`} />
+          <StatusCard icon={<Trophy className="h-4 w-4" />} title="Premio" value={`+${room.sparkReward} Spark`} />
+          <StatusCard icon={<Clock className="h-4 w-4" />} title="Stato" value={timeline.phase === "waiting" ? "Prevendita" : timeline.phase === "playing" ? "Live" : "Chiusura"} />
+          <StatusCard icon={<TimerReset className="h-4 w-4" />} title="Max cartelle" value={`${maxCards} per round`} />
+        </div>
+      </section>
+
+      <section className="relative z-10 mt-3 px-4">
+        <div className="rounded-3xl border border-white/10 bg-card-game p-4 shadow-card-game">
+          <div className="flex items-center justify-between gap-2">
+            <div>
+              <p className="text-sm font-extrabold text-white">Ultimi esiti room</p>
+              <p className="mt-1 text-[11px] font-bold text-white/55">Stile sala online: countdown solo per il prossimo avvio, vincita validata a parte.</p>
+            </div>
+            <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/55">Storico live</span>
+          </div>
+
+          <div className="mt-3 space-y-2">
+            {recentResults.map(({ roundIndex, winner }) => (
+              <div key={roundIndex} className="flex items-center justify-between gap-3 rounded-2xl border border-white/8 bg-black/20 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">{winner.avatar}</span>
+                  <div>
+                    <p className="text-xs font-extrabold text-white">Round #{roundIndex + 1}</p>
+                    <p className="text-[11px] font-bold text-white/55">Vincitore validato: {winner.name}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-extrabold text-gold">+{room.sparkReward} Spark</p>
+                  <p className="text-[11px] font-bold text-white/55">+{room.ticketReward} Ticket</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {(timeline.phase === "playing" && currentReservations.length === 0) || timeline.phase === "finished" ? (
+        <section className="relative z-10 mt-3 px-4">
+          <div className="rounded-3xl border border-white/10 bg-card-game p-4 shadow-card-game">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl bg-black/25 text-gold">
+                <Info className="h-5 w-5" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-extrabold text-white">
+                  {timeline.phase === "playing"
+                    ? "Partita in corso, attendi la fine della partita per partecipare al prossimo turno"
+                    : `Turno chiuso. Vincitore: ${finishedWinner}`}
+                </p>
+                <p className="mt-1 text-xs font-bold text-white/60">
+                  {timeline.phase === "playing"
+                    ? "Non vedrai né riceverai cartelle per questa partita. Puoi però prenotare subito più cartelle per il turno successivo."
+                    : "Tra pochi secondi comparirà di nuovo il countdown utile per acquistare le cartelle del turno successivo."}
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+      ) : null}
 
       {timeline.phase === "playing" && drawnNumbers.length > 0 && (
         <div className="relative z-10 mt-3 flex flex-wrap justify-center gap-1.5 px-4">
@@ -1178,7 +1162,7 @@ function BingoCardPanel({
   entry: CardInsight;
   index: number;
   total: number;
-  size: 3 | 5;
+  size: 3 | 4 | 5;
   glowColor: string;
   isInteractive: boolean;
   subtitle: string;
@@ -1188,6 +1172,7 @@ function BingoCardPanel({
   onMark: (slot: number, n: number) => void;
 }) {
   const bestLineSet = new Set(bestLineIndices);
+  const cardMaxWidth = size === 4 ? 272 : size === 5 ? 292 : 246;
 
   return (
     <div className="rounded-3xl border border-white/10 bg-black/20 p-3 shadow-card-game">
@@ -1211,50 +1196,38 @@ function BingoCardPanel({
         </div>
       </div>
 
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: `repeat(${size}, 1fr)`,
-          gap: "4px",
-        }}
-      >
-        {entry.card.map((n, i) => {
-          const isFree = n === 0;
-          const isMarked = isFree || entry.markedSet.has(n);
-          const isPriority = bestLineSet.has(i);
-          const palette = CELL_PALETTE[i % CELL_PALETTE.length];
+      <div className="mx-auto" style={{ maxWidth: `${cardMaxWidth}px` }}>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateColumns: `repeat(${size}, minmax(0, 1fr))`,
+            gap: size === 4 ? "6px" : "5px",
+          }}
+        >
+          {entry.card.map((n, i) => {
+            const isMarked = n !== 0 && entry.markedSet.has(n);
+            const isPriority = bestLineSet.has(i);
 
-          return (
-            <motion.button
-              key={`${entry.key}-${i}`}
-              whileTap={{ scale: isInteractive ? 0.92 : 1 }}
-              onClick={() => onMark(entry.slot, n)}
-              className={`relative flex aspect-square items-center justify-center rounded-xl bg-gradient-to-br text-sm font-extrabold shadow-md transition-all select-none ${
-                isFree ? "from-gold to-[oklch(0.7_0.25_25)] text-white" : palette
-              } ${isInteractive ? (isMarked ? "opacity-100 ring-2 ring-white/60 scale-105" : "opacity-75") : "opacity-90"} ${
-                isPriority && !isMarked ? "ring-2 ring-cyan-200/70" : ""
-              }`}
-              style={
-                (isInteractive && isMarked && !isFree) || isPriority
-                  ? {
-                      boxShadow: `0 0 12px ${isPriority ? "oklch(0.78 0.16 230 / 0.75)" : glowColor}`,
-                      filter: isInteractive && isMarked ? "brightness(1.15)" : "brightness(1.02)",
-                    }
-                  : undefined
-              }
-            >
-              {isFree ? "⭐" : n}
-              {isInteractive && isMarked && !isFree && (
-                <span className="absolute inset-0 flex items-center justify-center">
-                  <span className="h-full w-full rounded-xl bg-white/20" />
-                </span>
-              )}
-              {!isMarked && isPriority && (
-                <span className="absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-cyan-200 shadow-[0_0_10px_oklch(0.78_0.16_230/0.9)]" />
-              )}
-            </motion.button>
-          );
-        })}
+            return (
+              <motion.button
+                key={`${entry.key}-${i}`}
+                whileTap={{ scale: isInteractive ? 0.96 : 1 }}
+                onClick={() => onMark(entry.slot, n)}
+                className={`relative flex aspect-square items-center justify-center rounded-lg border text-[18px] font-extrabold transition-all select-none ${
+                  isMarked
+                    ? "border-gold/70 bg-gold-shine text-purple-deep shadow-[0_0_14px_oklch(0.85_0.18_90/0.45)]"
+                    : "border-white/35 bg-white text-[oklch(0.2_0.02_280)]"
+                } ${isInteractive ? "active:scale-95" : ""} ${isPriority && !isMarked ? "ring-1 ring-cyan-200/60" : ""}`}
+                style={isMarked ? { boxShadow: `0 0 14px ${glowColor}` } : undefined}
+              >
+                <span className="leading-none">{n}</span>
+                {!isMarked && isPriority && (
+                  <span className="absolute bottom-1 right-1 h-1.5 w-1.5 rounded-full bg-cyan-200 shadow-[0_0_8px_oklch(0.78_0.16_230/0.75)]" />
+                )}
+              </motion.button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

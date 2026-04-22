@@ -30,7 +30,7 @@ export interface RoomConfig {
   /** numbers pool max (1..max) */
   maxNumber: number;
   /** card size NxN */
-  cardSize: 3 | 5;
+  cardSize: 3 | 4 | 5;
   /** visible badges in lobby card */
   badges: ("live" | "vip" | "hot" | "free" | "new")[];
   accent: string;
@@ -105,7 +105,7 @@ export const ROOMS: RoomConfig[] = [
     sparkReward: 180,
     ticketReward: 2,
     maxNumber: 90,
-    cardSize: 5,
+    cardSize: 4,
     badges: ["live", "hot"],
     accent: "from-[oklch(0.7_0.25_25)] to-[oklch(0.5_0.25_15)]",
     glow: "oklch(0.85 0.18 90)",
