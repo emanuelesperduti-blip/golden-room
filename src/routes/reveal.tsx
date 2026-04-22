@@ -8,6 +8,7 @@ import { GameButton } from "@/components/game/GameButton";
 import revealChest from "@/assets/reveal-chest.png";
 import sparkIcon from "@/assets/icon-spark.png";
 import { useGameStore } from "@/lib/gameStore";
+import { useViewerGameState } from "@/hooks/useViewerGameState";
 import { useAudio } from "@/hooks/useAudio";
 
 export const Route = createFileRoute("/reveal")({
@@ -53,10 +54,8 @@ function pick<T>(arr: T[]): T {
 
 function RevealPage() {
   const { sfx } = useAudio();
-  const tickets = useGameStore((s) => s.tickets);
+  const { tickets, premiumRevealsLeft, vip } = useViewerGameState();
   const dailyRevealUsed = useGameStore((s) => s.dailyRevealUsed);
-  const premiumRevealsLeft = useGameStore((s) => s.premiumRevealsLeft);
-  const vip = useGameStore((s) => s.vip);
   const useFreeReveal = useGameStore((s) => s.useFreeReveal);
   const usePremiumReveal = useGameStore((s) => s.usePremiumReveal);
   const addSparks = useGameStore((s) => s.addSparks);

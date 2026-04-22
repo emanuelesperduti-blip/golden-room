@@ -8,6 +8,7 @@ import shopTickets from "@/assets/shop-tickets.png";
 import shopVault from "@/assets/shop-spark-vault.png";
 import shopVip from "@/assets/shop-vip-pass.png";
 import { useGameStore } from "@/lib/gameStore";
+import { useViewerGameState } from "@/hooks/useViewerGameState";
 import { useAudio } from "@/hooks/useAudio";
 
 export const Route = createFileRoute("/shop")({
@@ -161,7 +162,7 @@ function ShopPage() {
   const addCoins   = useGameStore((s) => s.addCoins);
   const addPremiumReveals = useGameStore((s) => s.addPremiumReveals);
   const activateVip = useGameStore((s) => s.activateVip);
-  const vip = useGameStore((s) => s.vip);
+  const { vip } = useViewerGameState();
 
   const [pending, setPending] = useState<PurchaseItem | null>(null);
   const [toast, setToast]     = useState<string | null>(null);

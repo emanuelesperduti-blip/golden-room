@@ -28,6 +28,7 @@ import { useGameStore } from "@/lib/gameStore";
 import { useAudio } from "@/hooks/useAudio";
 import { setAuthRedirect } from "@/lib/authRedirect";
 import { useAuth } from "@/hooks/useAuth";
+import { useViewerGameState } from "@/hooks/useViewerGameState";
 import { BOTS, BotChatEngine } from "@/lib/bots";
 
 const searchSchema = z.object({ roomId: z.string().optional() });
@@ -159,10 +160,9 @@ function BingoPage() {
   const { user } = useAuth();
 
   const playerSeed = useGameStore((s) => s.playerSeed);
-  const username = useGameStore((s) => s.username);
+  const { username, tickets } = useViewerGameState();
   const musicMuted = useGameStore((s) => s.musicMuted);
   const muted = useGameStore((s) => s.muted);
-  const tickets = useGameStore((s) => s.tickets);
   const spendTickets = useGameStore((s) => s.spendTickets);
   const addSparks = useGameStore((s) => s.addSparks);
   const addTickets = useGameStore((s) => s.addTickets);

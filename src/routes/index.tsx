@@ -15,6 +15,7 @@ import shopVip from "@/assets/shop-vip-pass.png";
 import sparkIcon from "@/assets/icon-spark.png";
 import { useGameStore, MISSIONS_CONFIG } from "@/lib/gameStore";
 import { useAuth } from "@/hooks/useAuth";
+import { useViewerGameState } from "@/hooks/useViewerGameState";
 import { BOTS, recentBotWins, ROOMS as BOT_ROOMS } from "@/lib/bots";
 import { useAudio } from "@/hooks/useAudio";
 
@@ -33,13 +34,11 @@ export const Route = createFileRoute("/")(
 function HomePage() {
   const { sfx } = useAudio();
   const { user } = useAuth();
+  const { streak, level, xp } = useViewerGameState();
   const dailyClaim = useGameStore((s) => s.dailyClaim);
   const claimEarlyBird = useGameStore((s) => s.claimEarlyBird);
           const lastClaimDate = useGameStore((s) => s.lastClaimDate);
   const lastEarlyBirdDate = useGameStore((s) => s.lastEarlyBirdDate);
-  const streak = useGameStore((s) => s.streak);
-  const level = useGameStore((s) => s.level);
-  const xp = useGameStore((s) => s.xp);
   const missions = useGameStore((s) => s.missions);
   const progressMission = useGameStore((s) => s.progressMission);
 

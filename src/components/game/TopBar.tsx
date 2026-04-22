@@ -1,23 +1,18 @@
-import { Crown, Volume2, VolumeX, Music, Music2, Ticket, Palette } from "lucide-react";
+import { Crown, Volume2, VolumeX, Ticket, Palette } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import coinIcon from "@/assets/icon-coin.png";
 import sparkIcon from "@/assets/icon-spark.png";
 import { useGameStore } from "@/lib/gameStore";
+import { useViewerGameState } from "@/hooks/useViewerGameState";
 import { useAudio } from "@/hooks/useAudio";
 
 export function TopBar() {
-  const coins = useGameStore((s) => s.coins);
-  const sparks = useGameStore((s) => s.sparks);
-  const tickets = useGameStore((s) => s.tickets);
-  const vip = useGameStore((s) => s.vip);
-  const streak = useGameStore((s) => s.streak);
+  const { coins, sparks, tickets, vip, streak } = useViewerGameState();
   const muted = useGameStore((s) => s.muted);
-  const musicMuted = useGameStore((s) => s.musicMuted);
   const theme = useGameStore((s) => s.theme);
   const toggleMute = useGameStore((s) => s.toggleMute);
-  const toggleMusic = useGameStore((s) => s.toggleMusic);
   const setTheme = useGameStore((s) => s.setTheme);
-  const { sfx, startMusic, stopMusic } = useAudio();
+  const { sfx } = useAudio();
 
   const isOcean = theme === "ocean";
 
@@ -86,18 +81,6 @@ export function TopBar() {
           className="flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white/70 active:scale-90"
         >
           {muted ? <VolumeX className="h-3.5 w-3.5" /> : <Volume2 className="h-3.5 w-3.5" />}
-        </button>
-        <button
-          onClick={() => {
-            sfx("tap");
-            toggleMusic();
-            if (musicMuted) startMusic();
-            else stopMusic();
-          }}
-          aria-label={musicMuted ? "Attiva musica" : "Disattiva musica"}
-          className="flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white/70 active:scale-90"
-        >
-          {musicMuted ? <Music2 className="h-3.5 w-3.5 opacity-40" /> : <Music className="h-3.5 w-3.5 text-gold" />}
         </button>
       </div>
 

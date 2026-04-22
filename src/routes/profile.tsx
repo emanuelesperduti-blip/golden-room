@@ -8,6 +8,7 @@ import sparkIcon from "@/assets/icon-spark.png";
 import coinIcon from "@/assets/icon-coin.png";
 import { useGameStore } from "@/lib/gameStore";
 import { useAuth } from "@/hooks/useAuth";
+import { useViewerGameState } from "@/hooks/useViewerGameState";
 import { resetPwaBannerDismissal } from "@/hooks/usePwaInstall";
 
 export const Route = createFileRoute("/profile")({
@@ -33,19 +34,18 @@ const AVATAR_OPTIONS = ["👑", "🎰", "🃏", "🦁", "🐯", "🦊", "🐸", 
 
 function ProfilePage() {
   const { user, signOut } = useAuth();
-  const username = useGameStore((s) => s.username);
-  const avatarEmoji = useGameStore((s) => s.avatar as string);
-  const level = useGameStore((s) => s.level);
-  const xp = useGameStore((s) => s.xp);
-  const streak = useGameStore((s) => s.streak);
-  const bingosWon = useGameStore((s) => s.bingosWon);
-  const revealsOpened = useGameStore((s) => s.revealsOpened);
-  const roundsPlayed = useGameStore((s) => s.roundsPlayed);
-  const sparks = useGameStore((s) => s.sparks);
-  const coins = useGameStore((s) => s.coins);
-  const tickets = useGameStore((s) => s.tickets);
-  const vip = useGameStore((s) => s.vip);
-  const rank = useGameStore((s) => s.rank);
+  const {
+    username,
+    avatar: avatarEmoji,
+    level,
+    xp,
+    streak,
+    sparks,
+    coins,
+    tickets,
+    vip,
+    rank,
+  } = useViewerGameState();
   const missions = useGameStore((s) => s.missions);
   const theme = useGameStore((s) => s.theme);
   const setTheme = useGameStore((s) => s.setTheme);
