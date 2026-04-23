@@ -5,10 +5,10 @@ import { useEffect, useMemo, useState } from "react";
 import { MobileShell } from "@/components/game/MobileShell";
 import { Badge } from "@/components/game/Badge";
 import sparkIcon from "@/assets/icon-spark.png";
-import { ROOMS, getRoomTimeline, type RoomConfig } from "@/lib/rooms";
+import { ROOMS, getRoomTimeline, getRoomPopulation, type RoomConfig } from "@/lib/rooms";
 import { useAudio } from "@/hooks/useAudio";
 import { useGameStore } from "@/lib/gameStore";
-import { simulatedPlayerCount, recentBotWins, BOTS } from "@/lib/bots";
+import { recentBotWins, BOTS } from "@/lib/bots";
 
 export const Route = createFileRoute("/lobby")({
   head: () => ({
@@ -91,7 +91,7 @@ function LobbyPage() {
       </header>
 
 
-      <section className="mx-4 mb-4 grid grid-cols-3 gap-2">
+      <section data-tour="lobby-summary" className="mx-4 mb-4 grid grid-cols-3 gap-2">
         <SummaryPill label="Prevendita" value={roomSummary.waiting} tone="gold" />
         <SummaryPill label="Live" value={roomSummary.playing} tone="red" />
         <SummaryPill label="Chiusura" value={roomSummary.finished} tone="cyan" />
@@ -119,7 +119,7 @@ function LobbyPage() {
         </div>
       </section>
 
-      <section className="space-y-3 px-4">
+      <section data-tour="lobby-room-list" className="space-y-3 px-4">
         {ROOMS.map((room, i) => (
           <RoomCard key={room.id} room={room} delay={i * 0.05} index={i} />
         ))}
@@ -134,13 +134,13 @@ function RoomCard({ room, delay, index }: { room: RoomConfig; delay: number; ind
   const { sfx } = useAudio();
   const progressMission = useGameStore((s) => s.progressMission);
   const [now, setNow] = useState(() => Date.now());
-  const [players, setPlayers] = useState(() => simulatedPlayerCount(200 + index * 300, index));
+  const [players, setPlayers] = useState(() => getRoomPopulation(room).total);
   const [recentWin, setRecentWin] = useState(() => recentBotWins(room.name)[0]);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setNow(Date.now());
-      setPlayers(simulatedPlayerCount(200 + index * 300, index));
+      setPlayers(getRoomPopulation(room).total);
     }, 1000);
 
     const winTimer = setInterval(() => {
@@ -203,7 +203,7 @@ function RoomCard({ room, delay, index }: { room: RoomConfig; delay: number; ind
 
               <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] font-extrabold text-white/90">
                 <span className="flex items-center gap-0.5 rounded-full bg-black/30 px-1.5 py-0.5">
-                  <Users className="h-3 w-3" /> {players.toLocaleString("it-IT")}
+                  <Users className="h-3 w-3" /> {players} in sala
                 </span>
                 <span className="flex items-center gap-0.5 rounded-full bg-black/30 px-1.5 py-0.5">
                   <Ticket className="h-3 w-3" /> {canReserve}

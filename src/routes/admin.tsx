@@ -1,0 +1,1386 @@
+import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { motion } from "framer-motion";
+import {
+  Shield,
+  Users,
+  Ticket,
+  Sparkles,
+  Activity,
+  Crown,
+  ArrowLeftRight,
+  BarChart3,
+  Bot,
+  UserRound,
+  SlidersHorizontal,
+  MessageSquareText,
+  Rabbit,
+  Coins,
+  Zap,
+  AlertCircle,
+  Bell,
+  Wrench,
+  TrendingUp,
+  FileText,
+  Trash2,
+  Plus,
+  Edit2,
+  Ban,
+  RotateCcw,
+  Send,
+  X,
+  ChevronDown,
+} from "lucide-react";
+import { MobileShell } from "@/components/game/MobileShell";
+import { useAuth } from "@/hooks/useAuth";
+import { useViewerGameState } from "@/hooks/useViewerGameState";
+import {
+  getControlledRoomPopulation,
+  getDefaultBotConfig,
+  isAdminUser,
+  readBotConfig,
+  saveBotConfig,
+  type BotRoomConfig,
+  type BotRoomConfigMap,
+  type ChatPace,
+  type ReactionSpeed,
+} from "@/lib/admin";
+import { ROOMS, getRoomTimeline } from "@/lib/rooms";
+import { useAdminStore, type UserProfile, type ActivityLog } from "@/lib/adminStore";
+
+export const Route = createFileRoute("/admin")({
+  head: () => ({
+    meta: [
+      { title: "GameSpark — Admin" },
+      { name: "description", content: "Pannello admin completo per Golden Room." },
+    ],
+  }),
+  component: AdminPage,
+});
+
+function AdminPage() {
+  const { user } = useAuth();
+  const { sparks, tickets, bingosWon } = useViewerGameState();
+  const allowed = isAdminUser(user);
+  const now = Date.now();
+  const [botConfig, setBotConfig] = useState<BotRoomConfigMap>(() => readBotConfig());
+  const [activeTab, setActiveTab] = useState<"dashboard" | "currencies" | "rooms" | "users" | "leaderboard" | "notifications" | "maintenance" | "events" | "logs">("dashboard");
+
+  // Admin store
+  const {
+    currencyConfig,
+    setCurrencyConfig,
+    roomConfigs,
+    setRoomConfig,
+    users,
+    addUser,
+    updateUser,
+    banUser,
+    unbanUser,
+    assignCreditsToUser,
+    assignCreditsToAll,
+    resetUserProfile,
+    winRecords,
+    addWinRecord,
+    getTopUsersBySparks,
+    getTopUsersByWins,
+    notifications,
+    addNotification,
+    removeNotification,
+    getActiveNotifications,
+    maintenance,
+    setMaintenance,
+    toggleMaintenance,
+    eventMultipliers,
+    addEventMultiplier,
+    updateEventMultiplier,
+    removeEventMultiplier,
+    getActiveMultipliers,
+    activityLogs,
+    addActivityLog,
+    getActivityLogs,
+  } = useAdminStore();
+
+  useEffect(() => {
+    saveBotConfig(botConfig);
+  }, [botConfig]);
+
+  const roomsState = useMemo(
+    () =>
+      ROOMS.map((room) => {
+        const timeline = getRoomTimeline(room, now);
+        const controlled = getControlledRoomPopulation(room, now);
+
+        return {
+          room,
+          timeline,
+          realUsers: controlled.realUsers,
+          bots: controlled.bots,
+          roomConfig: botConfig[room.id] ?? controlled.config,
+        };
+      }),
+    [now, botConfig]
+  );
+
+  const realUsersNow = roomsState.reduce((sum, entry) => sum + entry.realUsers, 0);
+  const activeBots = roomsState.reduce((sum, entry) => sum + entry.bots, 0);
+  const connectedNow = realUsersNow + activeBots;
+  const activeGames = roomsState.filter((entry) => entry.timeline.phase === "playing").length;
+  const ticketsSoldToday = roomsState.reduce((sum, entry) => sum + (entry.realUsers + entry.bots) * Math.max(1, entry.room.ticketCost), 0);
+  const sparksDistributed = roomsState.reduce((sum, entry) => sum + entry.room.sparkReward * Math.max(1, entry.realUsers + entry.bots), 0);
+
+  const activityBars = Array.from({ length: 8 }, (_, index) => {
+    const base = connectedNow + sparks + tickets + bingosWon * 3;
+    const value = 28 + ((base + index * 11) % 64);
+    return { label: `${index * 3}h`, value };
+  });
+
+  function updateRoomConfig(roomId: string, patch: Partial<BotRoomConfig>) {
+    setBotConfig((prev) => ({
+      ...prev,
+      [roomId]: {
+        ...(prev[roomId] ?? getDefaultBotConfig()[roomId]),
+        ...patch,
+      },
+    }));
+  }
+
+  if (!allowed) {
+    return (
+      <MobileShell title="Admin Panel">
+        <div className="px-4 pb-24 pt-5">
+          <div className="rounded-3xl border border-red-400/25 bg-[linear-gradient(180deg,rgba(70,0,20,0.65),rgba(15,5,20,0.92))] p-5 text-center shadow-card-game">
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/15 text-red-200">
+              <Shield className="h-7 w-7" />
+            </div>
+            <p className="mt-4 text-xl font-black text-white">Accesso non autorizzato</p>
+            <p className="mt-2 text-sm font-semibold text-white/65">Questa sezione è disponibile solo per l&apos;account admin del sito.</p>
+            <Link to="/profile" className="mt-4 inline-flex items-center gap-2 rounded-2xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-extrabold text-white">
+              <ArrowLeftRight className="h-4 w-4" />
+              Torna al profilo
+            </Link>
+          </div>
+        </div>
+      </MobileShell>
+    );
+  }
+
+  return (
+    <MobileShell title="Admin Panel">
+      <div className="px-4 pb-24 pt-5">
+        {/* Header */}
+        <motion.section
+          initial={{ opacity: 0, y: 14 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="overflow-hidden rounded-[32px] border border-gold/20 bg-[linear-gradient(155deg,rgba(45,18,79,0.95),rgba(15,10,28,0.98))] p-5 shadow-card-game"
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-gold/30 bg-gold/10 px-3 py-1 text-[10px] font-extrabold uppercase tracking-[0.18em] text-gold">
+                <Shield className="h-3.5 w-3.5" />
+                Golden Room Admin
+              </div>
+              <h2 className="mt-3 text-2xl font-black text-white">Pannello di controllo</h2>
+              <p className="mt-1 text-xs font-semibold leading-relaxed text-white/60">Gestione completa: valute, room, utenti, eventi e manutenzione.</p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-right">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">Ruolo</p>
+              <p className="mt-1 text-sm font-extrabold text-gold">Admin</p>
+            </div>
+          </div>
+        </motion.section>
+
+        {/* Tab Navigation */}
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
+          {[
+            { id: "dashboard", label: "Dashboard", icon: BarChart3 },
+            { id: "currencies", label: "Valute", icon: Coins },
+            { id: "rooms", label: "Room", icon: SlidersHorizontal },
+            { id: "users", label: "Utenti", icon: Users },
+            { id: "leaderboard", label: "Classifica", icon: TrendingUp },
+            { id: "notifications", label: "Notifiche", icon: Bell },
+            { id: "maintenance", label: "Manutenzione", icon: Wrench },
+            { id: "events", label: "Eventi", icon: Zap },
+            { id: "logs", label: "Log", icon: FileText },
+          ].map(({ id, label, icon: Icon }) => (
+            <button
+              key={id}
+              onClick={() => setActiveTab(id as any)}
+              className={`flex items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-2 text-xs font-bold transition-all ${
+                activeTab === id
+                  ? "border border-gold/50 bg-gold/20 text-gold"
+                  : "border border-white/10 bg-white/5 text-white/60 hover:bg-white/10"
+              }`}
+            >
+              <Icon className="h-3.5 w-3.5" />
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {/* Dashboard Tab */}
+        {activeTab === "dashboard" && (
+          <>
+            <section className="mt-4 grid grid-cols-2 gap-3">
+              <KpiCard icon={<UserRound className="h-5 w-5" />} label="Utenti reali online" value={realUsersNow.toString()} accent="cyan" />
+              <KpiCard icon={<Bot className="h-5 w-5" />} label="Bot attivi" value={activeBots.toString()} accent="violet" />
+              <KpiCard icon={<Users className="h-5 w-5" />} label="Totale partecipanti" value={connectedNow.toString()} accent="gold" />
+              <KpiCard icon={<Activity className="h-5 w-5" />} label="Partite attive" value={activeGames.toString()} accent="pink" />
+            </section>
+
+            <section className="mt-3 grid grid-cols-2 gap-3">
+              <KpiCard icon={<Ticket className="h-5 w-5" />} label="Biglietti venduti oggi" value={ticketsSoldToday.toLocaleString("it-IT")} accent="gold" />
+              <KpiCard icon={<Sparkles className="h-5 w-5" />} label="Spark distribuiti" value={sparksDistributed.toLocaleString("it-IT")} accent="pink" />
+            </section>
+
+            <section className="mt-4 rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-black text-white">Attività ultime 24 ore</p>
+                  <p className="mt-1 text-[11px] font-bold text-white/55">KPI live per il pannello admin</p>
+                </div>
+                <span className="rounded-full border border-white/10 bg-black/20 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/60">Live</span>
+              </div>
+              <div className="mt-4 flex h-36 items-end gap-2">
+                {activityBars.map((bar) => (
+                  <div key={bar.label} className="flex flex-1 flex-col items-center gap-2">
+                    <div className="flex h-24 w-full items-end rounded-2xl bg-black/20 p-1.5">
+                      <div
+                        className="w-full rounded-xl bg-[linear-gradient(180deg,rgba(255,217,93,0.95),rgba(255,83,178,0.9),rgba(111,76,255,0.9))] shadow-[0_0_18px_rgba(255,83,178,0.28)]"
+                        style={{ height: `${bar.value}%` }}
+                      />
+                    </div>
+                    <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/45">{bar.label}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section className="mt-4 rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="h-5 w-5 text-gold" />
+                <p className="text-sm font-black text-white">Stato room</p>
+              </div>
+              <div className="mt-3 space-y-2.5">
+                {roomsState.map(({ room, timeline, realUsers, bots }) => (
+                  <div key={room.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/8 bg-black/20 px-3 py-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-extrabold text-white">{room.name}</p>
+                      <p className="mt-1 text-[11px] font-bold text-white/55">
+                        {realUsers + bots} in sala · {realUsers} reali · {bots} bot · fase {phaseLabel(timeline.phase)}
+                      </p>
+                    </div>
+                    <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-white/65">
+                      {room.tier}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </section>
+          </>
+        )}
+
+        {/* Step 5: Currencies Tab */}
+        {activeTab === "currencies" && <CurrenciesTab currencyConfig={currencyConfig} setCurrencyConfig={setCurrencyConfig} assignCreditsToAll={assignCreditsToAll} addActivityLog={addActivityLog} />}
+
+        {/* Step 6: Rooms Tab */}
+        {activeTab === "rooms" && (
+          <RoomsTab
+            roomsState={roomsState}
+            botConfig={botConfig}
+            updateRoomConfig={updateRoomConfig}
+            roomConfigs={roomConfigs}
+            setRoomConfig={setRoomConfig}
+            addActivityLog={addActivityLog}
+          />
+        )}
+
+        {/* Step 7: Users Tab */}
+        {activeTab === "users" && (
+          <UsersTab
+            users={users}
+            addUser={addUser}
+            updateUser={updateUser}
+            banUser={banUser}
+            unbanUser={unbanUser}
+            assignCreditsToUser={assignCreditsToUser}
+            resetUserProfile={resetUserProfile}
+            addActivityLog={addActivityLog}
+          />
+        )}
+
+        {/* Step 8: Leaderboard Tab */}
+        {activeTab === "leaderboard" && (
+          <LeaderboardTab
+            users={users}
+            winRecords={winRecords}
+            getTopUsersBySparks={getTopUsersBySparks}
+            getTopUsersByWins={getTopUsersByWins}
+          />
+        )}
+
+        {/* Step 9: Notifications Tab */}
+        {activeTab === "notifications" && (
+          <NotificationsTab
+            notifications={notifications}
+            addNotification={addNotification}
+            removeNotification={removeNotification}
+            addActivityLog={addActivityLog}
+          />
+        )}
+
+        {/* Step 10: Maintenance Tab */}
+        {activeTab === "maintenance" && (
+          <MaintenanceTab
+            maintenance={maintenance}
+            setMaintenance={setMaintenance}
+            toggleMaintenance={toggleMaintenance}
+            addActivityLog={addActivityLog}
+          />
+        )}
+
+        {/* Step 11: Events Tab */}
+        {activeTab === "events" && (
+          <EventsTab
+            eventMultipliers={eventMultipliers}
+            addEventMultiplier={addEventMultiplier}
+            updateEventMultiplier={updateEventMultiplier}
+            removeEventMultiplier={removeEventMultiplier}
+            addActivityLog={addActivityLog}
+          />
+        )}
+
+        {/* Step 12: Logs Tab */}
+        {activeTab === "logs" && <LogsTab activityLogs={activityLogs} getActivityLogs={getActivityLogs} />}
+
+        {/* Bot Management Section */}
+        <section className="mt-4 rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+          <div className="flex items-center gap-2">
+            <SlidersHorizontal className="h-5 w-5 text-gold" />
+            <p className="text-sm font-black text-white">Gestione bot per room</p>
+          </div>
+          <p className="mt-1 text-[11px] font-bold text-white/55">Configura quantità bot, frequenza chat e velocità di reazione per ogni room.</p>
+          <div className="mt-3 space-y-3">
+            {roomsState.map(({ room, roomConfig }) => (
+              <div key={room.id} className="rounded-3xl border border-white/8 bg-black/20 p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-extrabold text-white">{room.name}</p>
+                    <p className="mt-1 text-[11px] font-bold text-white/50">I bot vincono solo per fortuna su cartelle reali. Nessun vantaggio speciale.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => updateRoomConfig(room.id, { enabled: !roomConfig.enabled })}
+                    className={`rounded-full px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.14em] ${
+                      roomConfig.enabled ? "border border-emerald-300/25 bg-emerald-400/15 text-emerald-100" : "border border-white/10 bg-white/5 text-white/50"
+                    }`}
+                  >
+                    {roomConfig.enabled ? "Bot ON" : "Bot OFF"}
+                  </button>
+                </div>
+
+                <div className="mt-3 grid grid-cols-1 gap-3">
+                  <label className="block">
+                    <div className="mb-1 flex items-center justify-between text-[11px] font-bold text-white/60">
+                      <span className="inline-flex items-center gap-1.5">
+                        <Bot className="h-3.5 w-3.5" /> Bot attivi
+                      </span>
+                      <span>{roomConfig.enabled ? roomConfig.botCount : 0}</span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={50}
+                      value={roomConfig.botCount}
+                      disabled={!roomConfig.enabled}
+                      onChange={(e) => updateRoomConfig(room.id, { botCount: Number(e.target.value) })}
+                      className="w-full accent-yellow-400 disabled:opacity-40"
+                    />
+                  </label>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <label className="block rounded-2xl border border-white/8 bg-white/5 p-2.5">
+                      <div className="mb-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-white/60">
+                        <MessageSquareText className="h-3.5 w-3.5" /> Chat
+                      </div>
+                      <select
+                        value={roomConfig.chatPace}
+                        disabled={!roomConfig.enabled}
+                        onChange={(e) => updateRoomConfig(room.id, { chatPace: e.target.value as ChatPace })}
+                        className="w-full rounded-xl border border-white/10 bg-black/30 px-2 py-2 text-xs font-bold text-white outline-none disabled:opacity-40"
+                      >
+                        <option value="bassa">Bassa</option>
+                        <option value="media">Media</option>
+                        <option value="alta">Alta</option>
+                      </select>
+                    </label>
+
+                    <label className="block rounded-2xl border border-white/8 bg-white/5 p-2.5">
+                      <div className="mb-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-white/60">
+                        <Rabbit className="h-3.5 w-3.5" /> Reazione
+                      </div>
+                      <select
+                        value={roomConfig.reactionSpeed}
+                        disabled={!roomConfig.enabled}
+                        onChange={(e) => updateRoomConfig(room.id, { reactionSpeed: e.target.value as ReactionSpeed })}
+                        className="w-full rounded-xl border border-white/10 bg-black/30 px-2 py-2 text-xs font-bold text-white outline-none disabled:opacity-40"
+                      >
+                        <option value="lenta">Lenta</option>
+                        <option value="normale">Normale</option>
+                        <option value="rapida">Rapida</option>
+                      </select>
+                    </label>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-4 rounded-[28px] border border-dashed border-gold/30 bg-[linear-gradient(180deg,rgba(245,180,0,0.08),rgba(20,12,30,0.72))] p-4 text-center shadow-card-game">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-gold-shine text-purple-deep shadow-button-gold">
+            <Crown className="h-6 w-6" />
+          </div>
+          <p className="mt-3 text-sm font-black text-white">Pannello Admin Completo</p>
+          <p className="mt-1 text-[11px] font-bold leading-relaxed text-white/60">
+            Step 5-12 implementati: valute, room, utenti, classifica, notifiche, manutenzione, eventi e log attività.
+          </p>
+        </section>
+      </div>
+    </MobileShell>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 5: Currencies Tab Component
+// ─────────────────────────────────────────────────────────────────────────────
+
+function CurrenciesTab({
+  currencyConfig,
+  setCurrencyConfig,
+  assignCreditsToAll,
+  addActivityLog,
+}: {
+  currencyConfig: any;
+  setCurrencyConfig: (config: any) => void;
+  assignCreditsToAll: (sparks: number, tickets: number, coins: number) => void;
+  addActivityLog: (log: any) => void;
+}) {
+  const [sparksInput, setSparksInput] = useState("0");
+  const [ticketsInput, setTicketsInput] = useState("0");
+  const [coinsInput, setCoinsInput] = useState("0");
+
+  const handleAssignAll = () => {
+    const sparks = parseInt(sparksInput) || 0;
+    const tickets = parseInt(ticketsInput) || 0;
+    const coins = parseInt(coinsInput) || 0;
+
+    assignCreditsToAll(sparks, tickets, coins);
+    addActivityLog({
+      type: "admin_action",
+      details: { action: "assign_credits_all", sparks, tickets, coins },
+      severity: "info",
+    });
+
+    setSparksInput("0");
+    setTicketsInput("0");
+    setCoinsInput("0");
+  };
+
+  return (
+    <section className="mt-4 space-y-4">
+      <div className="rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+        <div className="flex items-center gap-2 mb-4">
+          <Coins className="h-5 w-5 text-gold" />
+          <p className="text-sm font-black text-white">Configurazione valute</p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3">
+          <label className="block">
+            <p className="text-xs font-bold text-white/60 mb-2">Valore Spark</p>
+            <input
+              type="number"
+              value={currencyConfig.sparkValue}
+              onChange={(e) => setCurrencyConfig({ sparkValue: Number(e.target.value) })}
+              className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+            />
+          </label>
+
+          <label className="block">
+            <p className="text-xs font-bold text-white/60 mb-2">Valore Ticket</p>
+            <input
+              type="number"
+              value={currencyConfig.ticketValue}
+              onChange={(e) => setCurrencyConfig({ ticketValue: Number(e.target.value) })}
+              className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+            />
+          </label>
+
+          <label className="block">
+            <p className="text-xs font-bold text-white/60 mb-2">Valore Coin/Token</p>
+            <input
+              type="number"
+              value={currencyConfig.coinValue}
+              onChange={(e) => setCurrencyConfig({ coinValue: Number(e.target.value) })}
+              className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+            />
+          </label>
+        </div>
+      </div>
+
+      <div className="rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+        <p className="text-sm font-black text-white mb-4">Assegna crediti a tutti gli utenti</p>
+
+        <div className="grid grid-cols-1 gap-3">
+          <label className="block">
+            <p className="text-xs font-bold text-white/60 mb-2">Spark da aggiungere</p>
+            <input
+              type="number"
+              value={sparksInput}
+              onChange={(e) => setSparksInput(e.target.value)}
+              className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+            />
+          </label>
+
+          <label className="block">
+            <p className="text-xs font-bold text-white/60 mb-2">Ticket da aggiungere</p>
+            <input
+              type="number"
+              value={ticketsInput}
+              onChange={(e) => setTicketsInput(e.target.value)}
+              className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+            />
+          </label>
+
+          <label className="block">
+            <p className="text-xs font-bold text-white/60 mb-2">Coin da aggiungere</p>
+            <input
+              type="number"
+              value={coinsInput}
+              onChange={(e) => setCoinsInput(e.target.value)}
+              className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+            />
+          </label>
+
+          <button
+            onClick={handleAssignAll}
+            className="mt-2 w-full rounded-2xl border border-gold/50 bg-gold/20 px-4 py-2 text-sm font-extrabold text-gold hover:bg-gold/30 transition-all"
+          >
+            Assegna a tutti
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 6: Rooms Tab Component
+// ─────────────────────────────────────────────────────────────────────────────
+
+function RoomsTab({
+  roomsState,
+  botConfig,
+  updateRoomConfig,
+  roomConfigs,
+  setRoomConfig,
+  addActivityLog,
+}: {
+  roomsState: any[];
+  botConfig: any;
+  updateRoomConfig: (roomId: string, config: any) => void;
+  roomConfigs: any;
+  setRoomConfig: (roomId: string, config: any) => void;
+  addActivityLog: (log: any) => void;
+}) {
+  return (
+    <section className="mt-4 space-y-4">
+      {roomsState.map(({ room }) => (
+        <div key={room.id} className="rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+          <p className="text-sm font-black text-white mb-3">{room.name}</p>
+
+          <div className="grid grid-cols-1 gap-3">
+            <label className="block">
+              <p className="text-xs font-bold text-white/60 mb-2">Durata countdown (secondi)</p>
+              <input
+                type="number"
+                defaultValue={room.waitingSec}
+                onChange={(e) => {
+                  setRoomConfig(room.id, { countdownDuration: Number(e.target.value) });
+                  addActivityLog({
+                    type: "admin_action",
+                    roomId: room.id,
+                    details: { action: "update_room_countdown", value: Number(e.target.value) },
+                    severity: "info",
+                  });
+                }}
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+              />
+            </label>
+
+            <label className="block">
+              <p className="text-xs font-bold text-white/60 mb-2">Durata partita (secondi)</p>
+              <input
+                type="number"
+                defaultValue={room.playingSec}
+                onChange={(e) => {
+                  setRoomConfig(room.id, { gameDuration: Number(e.target.value) });
+                  addActivityLog({
+                    type: "admin_action",
+                    roomId: room.id,
+                    details: { action: "update_room_duration", value: Number(e.target.value) },
+                    severity: "info",
+                  });
+                }}
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+              />
+            </label>
+
+            <label className="block">
+              <p className="text-xs font-bold text-white/60 mb-2">Costo cartella (ticket)</p>
+              <input
+                type="number"
+                defaultValue={room.ticketCost}
+                onChange={(e) => {
+                  setRoomConfig(room.id, { ticketCost: Number(e.target.value) });
+                  addActivityLog({
+                    type: "admin_action",
+                    roomId: room.id,
+                    details: { action: "update_ticket_cost", value: Number(e.target.value) },
+                    severity: "info",
+                  });
+                }}
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+              />
+            </label>
+
+            <label className="block">
+              <p className="text-xs font-bold text-white/60 mb-2">Premio Spark</p>
+              <input
+                type="number"
+                defaultValue={room.sparkReward}
+                onChange={(e) => {
+                  setRoomConfig(room.id, { sparkReward: Number(e.target.value) });
+                  addActivityLog({
+                    type: "admin_action",
+                    roomId: room.id,
+                    details: { action: "update_spark_reward", value: Number(e.target.value) },
+                    severity: "info",
+                  });
+                }}
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+              />
+            </label>
+          </div>
+        </div>
+      ))}
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 7: Users Tab Component
+// ─────────────────────────────────────────────────────────────────────────────
+
+function UsersTab({
+  users,
+  addUser,
+  updateUser,
+  banUser,
+  unbanUser,
+  assignCreditsToUser,
+  resetUserProfile,
+  addActivityLog,
+}: {
+  users: Record<string, any>;
+  addUser: (user: any) => void;
+  updateUser: (userId: string, updates: any) => void;
+  banUser: (userId: string, reason: string) => void;
+  unbanUser: (userId: string) => void;
+  assignCreditsToUser: (userId: string, sparks: number, tickets: number, coins: number) => void;
+  resetUserProfile: (userId: string) => void;
+  addActivityLog: (log: any) => void;
+}) {
+  const [selectedUser, setSelectedUser] = useState<string | null>(null);
+
+  const userList = Object.values(users);
+
+  return (
+    <section className="mt-4 space-y-4">
+      <div className="rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+        <p className="text-sm font-black text-white mb-4">Utenti registrati ({userList.length})</p>
+
+        <div className="space-y-2">
+          {userList.map((user) => (
+            <div
+              key={user.id}
+              onClick={() => setSelectedUser(selectedUser === user.id ? null : user.id)}
+              className={`rounded-2xl border p-3 cursor-pointer transition-all ${
+                selectedUser === user.id
+                  ? "border-gold/50 bg-gold/10"
+                  : "border-white/10 bg-black/20 hover:bg-black/30"
+              }`}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold text-white truncate">{user.username}</p>
+                  <p className="text-xs text-white/50 truncate">{user.email}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  {user.isBanned && <Ban className="h-4 w-4 text-red-400" />}
+                  <ChevronDown className={`h-4 w-4 text-white/50 transition-transform ${selectedUser === user.id ? "rotate-180" : ""}`} />
+                </div>
+              </div>
+
+              {selectedUser === user.id && (
+                <div className="mt-3 space-y-2 border-t border-white/10 pt-3">
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div>
+                      <p className="text-white/60">Spark</p>
+                      <p className="font-bold text-white">{user.sparks}</p>
+                    </div>
+                    <div>
+                      <p className="text-white/60">Ticket</p>
+                      <p className="font-bold text-white">{user.tickets}</p>
+                    </div>
+                    <div>
+                      <p className="text-white/60">Coin</p>
+                      <p className="font-bold text-white">{user.coins}</p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <p className="text-white/60">Partite</p>
+                      <p className="font-bold text-white">{user.gamesPlayed}</p>
+                    </div>
+                    <div>
+                      <p className="text-white/60">Vittorie</p>
+                      <p className="font-bold text-white">{user.wins}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 pt-2">
+                    {!user.isBanned ? (
+                      <button
+                        onClick={() => {
+                          banUser(user.id, "Admin ban");
+                          addActivityLog({
+                            type: "ban",
+                            userId: user.id,
+                            username: user.username,
+                            details: { action: "ban_user" },
+                            severity: "warning",
+                          });
+                        }}
+                        className="flex-1 rounded-lg border border-red-400/50 bg-red-500/10 px-2 py-1 text-xs font-bold text-red-300 hover:bg-red-500/20"
+                      >
+                        <Ban className="h-3 w-3 inline mr-1" /> Ban
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => {
+                          unbanUser(user.id);
+                          addActivityLog({
+                            type: "admin_action",
+                            userId: user.id,
+                            username: user.username,
+                            details: { action: "unban_user" },
+                            severity: "info",
+                          });
+                        }}
+                        className="flex-1 rounded-lg border border-green-400/50 bg-green-500/10 px-2 py-1 text-xs font-bold text-green-300 hover:bg-green-500/20"
+                      >
+                        Sblocca
+                      </button>
+                    )}
+
+                    <button
+                      onClick={() => {
+                        resetUserProfile(user.id);
+                        addActivityLog({
+                          type: "admin_action",
+                          userId: user.id,
+                          username: user.username,
+                          details: { action: "reset_profile" },
+                          severity: "warning",
+                        });
+                      }}
+                      className="flex-1 rounded-lg border border-yellow-400/50 bg-yellow-500/10 px-2 py-1 text-xs font-bold text-yellow-300 hover:bg-yellow-500/20"
+                    >
+                      <RotateCcw className="h-3 w-3 inline mr-1" /> Reset
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ))}
+
+          {userList.length === 0 && (
+            <p className="text-xs text-white/50 text-center py-4">Nessun utente registrato</p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 8: Leaderboard Tab Component
+// ─────────────────────────────────────────────────────────────────────────────
+
+function LeaderboardTab({
+  users,
+  winRecords,
+  getTopUsersBySparks,
+  getTopUsersByWins,
+}: {
+  users: Record<string, any>;
+  winRecords: any[];
+  getTopUsersBySparks: (limit: number) => any[];
+  getTopUsersByWins: (limit: number) => any[];
+}) {
+  const topBySparks = getTopUsersBySparks(10);
+  const topByWins = getTopUsersByWins(10);
+  const recentWins = winRecords.slice(0, 20);
+
+  return (
+    <section className="mt-4 space-y-4">
+      <div className="rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+        <p className="text-sm font-black text-white mb-4">Top 10 per Spark</p>
+        <div className="space-y-2">
+          {topBySparks.map((user, index) => (
+            <div key={user.id} className="flex items-center justify-between rounded-lg border border-white/8 bg-black/20 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gold w-6">{index + 1}.</span>
+                <div>
+                  <p className="text-xs font-bold text-white">{user.username}</p>
+                  <p className="text-[10px] text-white/50">{user.email}</p>
+                </div>
+              </div>
+              <p className="text-sm font-extrabold text-gold">{user.sparks}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+        <p className="text-sm font-black text-white mb-4">Top 10 per Vittorie</p>
+        <div className="space-y-2">
+          {topByWins.map((user, index) => (
+            <div key={user.id} className="flex items-center justify-between rounded-lg border border-white/8 bg-black/20 px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-bold text-gold w-6">{index + 1}.</span>
+                <div>
+                  <p className="text-xs font-bold text-white">{user.username}</p>
+                  <p className="text-[10px] text-white/50">{user.email}</p>
+                </div>
+              </div>
+              <p className="text-sm font-extrabold text-gold">{user.wins}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+        <p className="text-sm font-black text-white mb-4">Ultime vincite ({recentWins.length})</p>
+        <div className="space-y-2">
+          {recentWins.map((win) => (
+            <div key={win.id} className="flex items-center justify-between rounded-lg border border-white/8 bg-black/20 px-3 py-2">
+              <div>
+                <p className="text-xs font-bold text-white">{win.username}</p>
+                <p className="text-[10px] text-white/50">{win.roomName}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-bold text-gold">+{win.sparkReward} Spark</p>
+                {win.ticketReward > 0 && <p className="text-[10px] text-white/50">+{win.ticketReward} Ticket</p>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 9: Notifications Tab Component
+// ─────────────────────────────────────────────────────────────────────────────
+
+function NotificationsTab({
+  notifications,
+  addNotification,
+  removeNotification,
+  addActivityLog,
+}: {
+  notifications: any[];
+  addNotification: (notification: any) => void;
+  removeNotification: (id: string) => void;
+  addActivityLog: (log: any) => void;
+}) {
+  const [title, setTitle] = useState("");
+  const [message, setMessage] = useState("");
+  const [type, setType] = useState<"banner" | "popup" | "temporary">("banner");
+  const [duration, setDuration] = useState("5000");
+
+  const handleCreate = () => {
+    if (!title || !message) return;
+
+    addNotification({
+      title,
+      message,
+      type,
+      displayDuration: parseInt(duration),
+      isActive: true,
+    });
+
+    addActivityLog({
+      type: "admin_action",
+      details: { action: "create_notification", title, message, type },
+      severity: "info",
+    });
+
+    setTitle("");
+    setMessage("");
+    setType("banner");
+    setDuration("5000");
+  };
+
+  return (
+    <section className="mt-4 space-y-4">
+      <div className="rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+        <p className="text-sm font-black text-white mb-4">Crea nuova notifica</p>
+
+        <div className="space-y-3">
+          <label className="block">
+            <p className="text-xs font-bold text-white/60 mb-2">Titolo</p>
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="es. Evento doppio Spark"
+              className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white placeholder-white/30 outline-none"
+            />
+          </label>
+
+          <label className="block">
+            <p className="text-xs font-bold text-white/60 mb-2">Messaggio</p>
+            <textarea
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder="es. Stasera dalle 21:00 doppio Spark su tutte le room!"
+              className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white placeholder-white/30 outline-none resize-none h-20"
+            />
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <p className="text-xs font-bold text-white/60 mb-2">Tipo</p>
+              <select
+                value={type}
+                onChange={(e) => setType(e.target.value as any)}
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+              >
+                <option value="banner">Banner</option>
+                <option value="popup">Popup</option>
+                <option value="temporary">Temporaneo</option>
+              </select>
+            </label>
+
+            <label className="block">
+              <p className="text-xs font-bold text-white/60 mb-2">Durata (ms)</p>
+              <input
+                type="number"
+                value={duration}
+                onChange={(e) => setDuration(e.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+              />
+            </label>
+          </div>
+
+          <button
+            onClick={handleCreate}
+            className="w-full rounded-2xl border border-gold/50 bg-gold/20 px-4 py-2 text-sm font-extrabold text-gold hover:bg-gold/30 transition-all"
+          >
+            <Send className="h-4 w-4 inline mr-2" /> Invia notifica
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+        <p className="text-sm font-black text-white mb-4">Notifiche attive ({notifications.length})</p>
+
+        <div className="space-y-2">
+          {notifications.map((notif) => (
+            <div key={notif.id} className="flex items-start justify-between gap-3 rounded-lg border border-white/8 bg-black/20 px-3 py-2">
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-white truncate">{notif.title}</p>
+                <p className="text-[10px] text-white/50 line-clamp-2">{notif.message}</p>
+                <p className="text-[10px] text-white/40 mt-1">{notif.type}</p>
+              </div>
+              <button
+                onClick={() => removeNotification(notif.id)}
+                className="rounded-lg border border-red-400/50 bg-red-500/10 p-1.5 text-red-300 hover:bg-red-500/20"
+              >
+                <X className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+
+          {notifications.length === 0 && (
+            <p className="text-xs text-white/50 text-center py-4">Nessuna notifica</p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 10: Maintenance Tab Component
+// ─────────────────────────────────────────────────────────────────────────────
+
+function MaintenanceTab({
+  maintenance,
+  setMaintenance,
+  toggleMaintenance,
+  addActivityLog,
+}: {
+  maintenance: any;
+  setMaintenance: (config: any) => void;
+  toggleMaintenance: (enabled: boolean) => void;
+  addActivityLog: (log: any) => void;
+}) {
+  return (
+    <section className="mt-4 space-y-4">
+      <div className="rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+        <div className="flex items-center justify-between gap-4 mb-4">
+          <div className="flex items-center gap-2">
+            <Wrench className="h-5 w-5 text-gold" />
+            <p className="text-sm font-black text-white">Modalità manutenzione</p>
+          </div>
+          <button
+            onClick={() => {
+              toggleMaintenance(!maintenance.isEnabled);
+              addActivityLog({
+                type: "admin_action",
+                details: { action: "toggle_maintenance", enabled: !maintenance.isEnabled },
+                severity: "warning",
+              });
+            }}
+            className={`rounded-full px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.14em] ${
+              maintenance.isEnabled
+                ? "border border-red-300/25 bg-red-400/15 text-red-100"
+                : "border border-white/10 bg-white/5 text-white/50"
+            }`}
+          >
+            {maintenance.isEnabled ? "ON" : "OFF"}
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <label className="block">
+            <p className="text-xs font-bold text-white/60 mb-2">Titolo</p>
+            <input
+              type="text"
+              value={maintenance.title}
+              onChange={(e) => setMaintenance({ title: e.target.value })}
+              className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+            />
+          </label>
+
+          <label className="block">
+            <p className="text-xs font-bold text-white/60 mb-2">Messaggio</p>
+            <textarea
+              value={maintenance.message}
+              onChange={(e) => setMaintenance({ message: e.target.value })}
+              className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none resize-none h-20"
+            />
+          </label>
+
+          <label className="block">
+            <p className="text-xs font-bold text-white/60 mb-2">Orario previsto ritorno online</p>
+            <input
+              type="datetime-local"
+              defaultValue={new Date(maintenance.estimatedReturnTime).toISOString().slice(0, 16)}
+              onChange={(e) => setMaintenance({ estimatedReturnTime: new Date(e.target.value).getTime() })}
+              className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+            />
+          </label>
+
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={maintenance.allowAdminAccess}
+              onChange={(e) => setMaintenance({ allowAdminAccess: e.target.checked })}
+              className="w-4 h-4 rounded border-white/10 bg-black/30"
+            />
+            <p className="text-xs font-bold text-white/60">Consenti accesso admin durante manutenzione</p>
+          </label>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 11: Events Tab Component
+// ─────────────────────────────────────────────────────────────────────────────
+
+function EventsTab({
+  eventMultipliers,
+  addEventMultiplier,
+  updateEventMultiplier,
+  removeEventMultiplier,
+  addActivityLog,
+}: {
+  eventMultipliers: any[];
+  addEventMultiplier: (event: any) => void;
+  updateEventMultiplier: (id: string, updates: any) => void;
+  removeEventMultiplier: (id: string) => void;
+  addActivityLog: (log: any) => void;
+}) {
+  const [eventName, setEventName] = useState("");
+  const [sparkMult, setSparkMult] = useState("2");
+  const [ticketMult, setTicketMult] = useState("1");
+  const [freeRoom, setFreeRoom] = useState(false);
+
+  const handleCreate = () => {
+    if (!eventName) return;
+
+    const newEvent = {
+      id: `event-${Date.now()}`,
+      name: eventName,
+      isActive: true,
+      sparkMultiplier: parseFloat(sparkMult),
+      ticketMultiplier: parseFloat(ticketMult),
+      freeRoomEnabled: freeRoom,
+      startTime: Date.now(),
+      endTime: Date.now() + 3600000,
+    };
+
+    addEventMultiplier(newEvent);
+    addActivityLog({
+      type: "admin_action",
+      details: { action: "create_event", eventName },
+      severity: "info",
+    });
+
+    setEventName("");
+    setSparkMult("2");
+    setTicketMult("1");
+    setFreeRoom(false);
+  };
+
+  return (
+    <section className="mt-4 space-y-4">
+      <div className="rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+        <p className="text-sm font-black text-white mb-4">Crea nuovo evento</p>
+
+        <div className="space-y-3">
+          <label className="block">
+            <p className="text-xs font-bold text-white/60 mb-2">Nome evento</p>
+            <input
+              type="text"
+              value={eventName}
+              onChange={(e) => setEventName(e.target.value)}
+              placeholder="es. Doppio Spark"
+              className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white placeholder-white/30 outline-none"
+            />
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <p className="text-xs font-bold text-white/60 mb-2">Moltiplicatore Spark</p>
+              <input
+                type="number"
+                step="0.1"
+                value={sparkMult}
+                onChange={(e) => setSparkMult(e.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+              />
+            </label>
+
+            <label className="block">
+              <p className="text-xs font-bold text-white/60 mb-2">Moltiplicatore Ticket</p>
+              <input
+                type="number"
+                step="0.1"
+                value={ticketMult}
+                onChange={(e) => setTicketMult(e.target.value)}
+                className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+              />
+            </label>
+          </div>
+
+          <label className="flex items-center gap-2">
+            <input
+              type="checkbox"
+              checked={freeRoom}
+              onChange={(e) => setFreeRoom(e.target.checked)}
+              className="w-4 h-4 rounded border-white/10 bg-black/30"
+            />
+            <p className="text-xs font-bold text-white/60">Abilita room gratis temporanea</p>
+          </label>
+
+          <button
+            onClick={handleCreate}
+            className="w-full rounded-2xl border border-gold/50 bg-gold/20 px-4 py-2 text-sm font-extrabold text-gold hover:bg-gold/30 transition-all"
+          >
+            <Plus className="h-4 w-4 inline mr-2" /> Crea evento
+          </button>
+        </div>
+      </div>
+
+      <div className="rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+        <p className="text-sm font-black text-white mb-4">Eventi attivi ({eventMultipliers.length})</p>
+
+        <div className="space-y-2">
+          {eventMultipliers.map((event) => (
+            <div key={event.id} className="flex items-start justify-between gap-3 rounded-lg border border-white/8 bg-black/20 px-3 py-2">
+              <div>
+                <p className="text-xs font-bold text-white">{event.name}</p>
+                <p className="text-[10px] text-white/50 mt-1">
+                  {event.sparkMultiplier}x Spark · {event.ticketMultiplier}x Ticket
+                  {event.freeRoomEnabled && " · Room gratis"}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  removeEventMultiplier(event.id);
+                  addActivityLog({
+                    type: "admin_action",
+                    details: { action: "remove_event", eventName: event.name },
+                    severity: "info",
+                  });
+                }}
+                className="rounded-lg border border-red-400/50 bg-red-500/10 p-1.5 text-red-300 hover:bg-red-500/20"
+              >
+                <Trash2 className="h-3 w-3" />
+              </button>
+            </div>
+          ))}
+
+          {eventMultipliers.length === 0 && (
+            <p className="text-xs text-white/50 text-center py-4">Nessun evento attivo</p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// STEP 12: Logs Tab Component
+// ─────────────────────────────────────────────────────────────────────────────
+
+function LogsTab({
+  activityLogs,
+  getActivityLogs,
+}: {
+  activityLogs: any[];
+  getActivityLogs: (filters?: any) => any[];
+}) {
+  const [filterType, setFilterType] = useState<string>("");
+  const logs = filterType ? getActivityLogs({ type: filterType }) : activityLogs;
+
+  return (
+    <section className="mt-4 space-y-4">
+      <div className="rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+        <p className="text-sm font-black text-white mb-4">Filtri</p>
+
+        <select
+          value={filterType}
+          onChange={(e) => setFilterType(e.target.value)}
+          className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+        >
+          <option value="">Tutti gli eventi</option>
+          <option value="purchase">Acquisti</option>
+          <option value="win">Vittorie</option>
+          <option value="admin_action">Azioni admin</option>
+          <option value="ban">Ban</option>
+          <option value="error">Errori</option>
+        </select>
+      </div>
+
+      <div className="rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+        <p className="text-sm font-black text-white mb-4">Log attività ({logs.length})</p>
+
+        <div className="space-y-2 max-h-96 overflow-y-auto">
+          {logs.slice(0, 50).map((log) => (
+            <div key={log.id} className="rounded-lg border border-white/8 bg-black/20 px-3 py-2">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                      log.severity === "error" ? "bg-red-500/20 text-red-300" :
+                      log.severity === "warning" ? "bg-yellow-500/20 text-yellow-300" :
+                      "bg-green-500/20 text-green-300"
+                    }`}>
+                      {log.type}
+                    </span>
+                    <p className="text-[10px] text-white/50">{new Date(log.timestamp).toLocaleTimeString("it-IT")}</p>
+                  </div>
+                  {log.username && <p className="text-xs font-bold text-white mt-1">{log.username}</p>}
+                  <p className="text-[10px] text-white/50 mt-0.5">{JSON.stringify(log.details).slice(0, 60)}...</p>
+                </div>
+              </div>
+            </div>
+          ))}
+
+          {logs.length === 0 && (
+            <p className="text-xs text-white/50 text-center py-4">Nessun log</p>
+          )}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Utility Components
+// ─────────────────────────────────────────────────────────────────────────────
+
+function KpiCard({
+  icon,
+  label,
+  value,
+  accent,
+}: {
+  icon: ReactNode;
+  label: string;
+  value: string;
+  accent: "cyan" | "violet" | "gold" | "pink";
+}) {
+  const accents = {
+    cyan: "bg-[linear-gradient(135deg,rgba(55,223,255,0.22),rgba(8,25,38,0.82))] text-cyan-100 border-cyan-300/20",
+    violet: "bg-[linear-gradient(135deg,rgba(124,58,237,0.26),rgba(20,12,34,0.86))] text-violet-100 border-violet-300/20",
+    gold: "bg-[linear-gradient(135deg,rgba(245,180,0,0.28),rgba(34,18,7,0.86))] text-yellow-100 border-yellow-300/20",
+    pink: "bg-[linear-gradient(135deg,rgba(255,61,166,0.24),rgba(35,12,25,0.84))] text-pink-100 border-pink-300/20",
+  };
+
+  return (
+    <div className={`rounded-[26px] border p-4 shadow-card-game ${accents[accent]}`}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-black/20">
+          {icon}
+        </div>
+        <p className="text-2xl font-black text-white">{value}</p>
+      </div>
+      <p className="mt-3 text-[11px] font-extrabold uppercase tracking-[0.16em] text-white/60">{label}</p>
+    </div>
+  );
+}
+
+function phaseLabel(phase: ReturnType<typeof getRoomTimeline>["phase"]) {
+  switch (phase) {
+    case "waiting":
+      return "prevendita";
+    case "playing":
+      return "live";
+    case "finished":
+      return "chiusura";
+    default:
+      return phase;
+  }
+}

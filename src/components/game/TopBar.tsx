@@ -1,10 +1,11 @@
-import { Crown, Volume2, VolumeX, Ticket, Palette } from "lucide-react";
+import { Crown, Volume2, VolumeX, Ticket, Palette, HelpCircle } from "lucide-react";
 import { Link } from "@tanstack/react-router";
 import coinIcon from "@/assets/icon-coin.png";
 import sparkIcon from "@/assets/icon-spark.png";
 import { useGameStore } from "@/lib/gameStore";
 import { useViewerGameState } from "@/hooks/useViewerGameState";
 import { useAudio } from "@/hooks/useAudio";
+import { useAppTour } from "@/components/tutorial/AppTour";
 
 export function TopBar() {
   const { coins, sparks, tickets, vip, streak } = useViewerGameState();
@@ -13,6 +14,7 @@ export function TopBar() {
   const toggleMute = useGameStore((s) => s.toggleMute);
   const setTheme = useGameStore((s) => s.setTheme);
   const { sfx } = useAudio();
+  const { startTour } = useAppTour();
 
   const isOcean = theme === "ocean";
 
@@ -24,7 +26,7 @@ export function TopBar() {
         background: isOcean ? "oklch(0.16 0.06 240 / 0.97)" : "oklch(0.16 0.08 300 / 0.97)",
       }}
     >
-      <div className="flex items-center gap-2 px-4 pt-2.5 pb-1">
+      <div className="flex items-center gap-2 px-4 pt-2.5 pb-1" data-tour="topbar-wallet">
         <Link to="/shop" className="flex items-center gap-1.5 rounded-full border border-white/15 bg-black/30 px-3 py-1 active:scale-95">
           <img src={coinIcon} alt="" className="h-4 w-4" />
           <span className="text-xs font-extrabold text-gold">{coins.toLocaleString("it-IT")}</span>
@@ -71,6 +73,19 @@ export function TopBar() {
             <span className="text-xs font-extrabold text-orange-300">{streak}</span>
           </div>
         )}
+
+
+        <button
+          type="button"
+          onClick={() => {
+            sfx("tap");
+            startTour();
+          }}
+          aria-label="Apri guida interattiva"
+          className="flex h-7 w-7 items-center justify-center rounded-full border border-white/15 bg-black/30 text-white/70 active:scale-90"
+        >
+          <HelpCircle className="h-3.5 w-3.5" />
+        </button>
 
         <button
           onClick={() => {

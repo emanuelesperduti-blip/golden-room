@@ -16,6 +16,7 @@ export function MobileNav() {
   return (
     <nav className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex justify-center pb-[max(env(safe-area-inset-bottom),0.5rem)]">
       <div
+        data-tour="mobile-nav"
         className="pointer-events-auto mx-3 flex w-full max-w-md items-end justify-between gap-1 rounded-3xl border border-white/10 px-3 pb-3 pt-2 shadow-card-game backdrop-blur-xl"
         style={{ background: "linear-gradient(160deg, oklch(0.36 0.2 320) 0%, oklch(0.24 0.16 305) 100%)" }}
       >

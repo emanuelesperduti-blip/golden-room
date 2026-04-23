@@ -24,14 +24,14 @@ export interface Mission {
 }
 
 export const MISSIONS_CONFIG: Mission[] = [
-  { id: "play_bingo_1", title: "Giocatore", description: "Partecipa a 1 partita di Bingo", reward_sparks: 20, reward_tickets: 0, total: 1, icon: "🎯" },
-  { id: "open_reveal_1", title: "Curioso", description: "Apri 1 Reveal", reward_sparks: 15, reward_tickets: 0, total: 1, icon: "✨" },
-  { id: "streak_3", title: "Fedele", description: "Fai login 3 giorni di fila", reward_sparks: 50, reward_tickets: 1, total: 3, icon: "🔥" },
-  { id: "win_bingo_1", title: "Vincitore", description: "Vinci 1 partita di Bingo", reward_sparks: 40, reward_tickets: 1, total: 1, icon: "🏆" },
-  { id: "enter_lobby", title: "Esploratore", description: "Visita la Lobby", reward_sparks: 10, reward_tickets: 0, total: 1, icon: "🗺️" },
-  { id: "open_reveal_3", title: "Collezionista", description: "Apri 3 Reveal in totale", reward_sparks: 35, reward_tickets: 1, total: 3, icon: "💎" },
-  { id: "win_bingo_3", title: "Campione", description: "Vinci 3 partite di Bingo", reward_sparks: 80, reward_tickets: 2, total: 3, icon: "👑" },
-  { id: "spend_sparks_50", title: "Big Spender", description: "Usa 50 Spark nelle room", reward_sparks: 30, reward_tickets: 0, total: 50, icon: "⚡" },
+  { id: "play_bingo_1", title: "Giocatore", description: "Partecipa a 1 partita di Bingo", reward_sparks: 6, reward_tickets: 0, total: 1, icon: "🎯" },
+  { id: "open_reveal_1", title: "Curioso", description: "Apri 1 Reveal", reward_sparks: 5, reward_tickets: 0, total: 1, icon: "✨" },
+  { id: "streak_3", title: "Fedele", description: "Fai login 3 giorni di fila", reward_sparks: 15, reward_tickets: 1, total: 3, icon: "🔥" },
+  { id: "win_bingo_1", title: "Vincitore", description: "Vinci 1 partita di Bingo", reward_sparks: 12, reward_tickets: 1, total: 1, icon: "🏆" },
+  { id: "enter_lobby", title: "Esploratore", description: "Visita la Lobby", reward_sparks: 3, reward_tickets: 0, total: 1, icon: "🗺️" },
+  { id: "open_reveal_3", title: "Collezionista", description: "Apri 3 Reveal in totale", reward_sparks: 10, reward_tickets: 1, total: 3, icon: "💎" },
+  { id: "win_bingo_3", title: "Campione", description: "Vinci 3 partite di Bingo", reward_sparks: 24, reward_tickets: 1, total: 3, icon: "👑" },
+  { id: "spend_sparks_50", title: "Big Spender", description: "Usa 50 Spark nelle room", reward_sparks: 9, reward_tickets: 0, total: 50, icon: "⚡" },
 ];
 
 interface MissionProgress {
@@ -162,10 +162,10 @@ export const useGameStore = create<GameState>()(
         const yStr = yesterday.toISOString().split("T")[0];
         const wasYesterday = s.lastClaimDate === yStr;
         const newStreak = wasYesterday ? s.streak + 1 : 1;
-        const baseSparks = 30 + newStreak * 10;
-        const baseTickets = newStreak >= 7 ? 3 : newStreak >= 3 ? 2 : 1;
+        const baseSparks = 6 + newStreak * 2;
+        const baseTickets = newStreak >= 7 ? 2 : newStreak >= 5 ? 1 : 0;
         const streakBonus = newStreak % 7 === 0;
-        const bonusSparks = streakBonus ? 100 : 0;
+        const bonusSparks = streakBonus ? 20 : 0;
 
         set({
           lastClaimDate: t,
@@ -208,8 +208,8 @@ export const useGameStore = create<GameState>()(
         set((st) => ({
           lastEarlyBirdDate: t,
           earlyBirdClaimed: true,
-          sparks: st.sparks + 50,
-          coins: st.coins + 200,
+          sparks: st.sparks + 12,
+          coins: st.coins + 150,
           premiumRevealsLeft: st.premiumRevealsLeft + 1,
         }));
         return { ok: true };

@@ -12,6 +12,12 @@ export interface BotMessage {
   isBot: true;
 }
 
+
+export type BotEngineOptions = {
+  enabled?: boolean;
+  chatPace?: "bassa" | "media" | "alta";
+  reactionSpeed?: "lenta" | "normale" | "rapida";
+};
 // Italian bot players with personality
 export const BOTS = [
   { name: "Marco_B", color: "oklch(0.78 0.16 220)", avatar: "🦁", personality: "excited" },
@@ -133,21 +139,28 @@ export class BotChatEngine {
   private timers: ReturnType<typeof setTimeout>[] = [];
   private cb: (msg: BotMessage) => void;
   private running = false;
+  private options: Required<BotEngineOptions>;
 
-  constructor(onMessage: (msg: BotMessage) => void) {
+  constructor(onMessage: (msg: BotMessage) => void, options: BotEngineOptions = {}) {
     this.cb = onMessage;
+    this.options = {
+      enabled: options.enabled ?? true,
+      chatPace: options.chatPace ?? "media",
+      reactionSpeed: options.reactionSpeed ?? "normale",
+    };
   }
 
   start() {
-    if (this.running) return;
+    if (this.running || !this.options.enabled) return;
     this.running = true;
     this.scheduleNext();
   }
 
   private scheduleNext() {
     if (!this.running) return;
-    // Random interval 3-12 seconds between bot messages
-    const delay = 3000 + Math.random() * 9000;
+    const pace = this.options.chatPace;
+    const ranges = pace === "bassa" ? [7000, 15000] : pace === "alta" ? [1800, 6500] : [3000, 9000];
+    const delay = ranges[0] + Math.random() * (ranges[1] - ranges[0]);
     const t = setTimeout(() => {
       this.cb(botMessage("general"));
       this.scheduleNext();
@@ -157,9 +170,11 @@ export class BotChatEngine {
 
   onDraw() {
     if (!this.running) return;
-    // 40% chance a bot reacts to the draw
-    if (Math.random() < 0.4) {
-      const t = setTimeout(() => this.cb(botMessage("draw")), 800 + Math.random() * 1200);
+    const reactionChance = this.options.chatPace === "bassa" ? 0.22 : this.options.chatPace === "alta" ? 0.62 : 0.4;
+    if (Math.random() < reactionChance) {
+      const speed = this.options.reactionSpeed;
+      const ranges = speed === "lenta" ? [1300, 2200] : speed === "rapida" ? [250, 700] : [800, 1400];
+      const t = setTimeout(() => this.cb(botMessage("draw")), ranges[0] + Math.random() * (ranges[1] - ranges[0]));
       this.timers.push(t);
     }
   }
@@ -167,16 +182,18 @@ export class BotChatEngine {
   onBingo() {
     if (!this.running) return;
     // 2-3 bots react to bingo
-    const count = 2 + Math.floor(Math.random() * 2);
+    const count = this.options.chatPace === "alta" ? 3 : 2;
+    const spacing = this.options.reactionSpeed === "rapida" ? 280 : this.options.reactionSpeed === "lenta" ? 700 : 500;
     for (let i = 0; i < count; i++) {
-      const t = setTimeout(() => this.cb(botMessage("bingo")), 300 + i * 600);
+      const t = setTimeout(() => this.cb(botMessage("bingo")), 250 + i * spacing);
       this.timers.push(t);
     }
   }
 
   onWaiting() {
     if (!this.running) return;
-    const t = setTimeout(() => this.cb(botMessage("waiting")), 1500);
+    const base = this.options.reactionSpeed === "rapida" ? 700 : this.options.reactionSpeed === "lenta" ? 1800 : 1200;
+    const t = setTimeout(() => this.cb(botMessage("waiting")), base);
     this.timers.push(t);
   }
 

@@ -4,6 +4,10 @@ import appCss from "../styles.css?url";
 import { AuthProvider, useAuth } from "@/hooks/useAuth";
 import { useGameStore } from "@/lib/gameStore";
 import { PwaRegistration } from "@/components/pwa/PwaRegistration";
+import { AppTourProvider } from "@/components/tutorial/AppTour";
+import { MaintenanceGuard } from "@/components/game/MaintenanceGuard";
+import { AdminNotificationLayer } from "@/components/game/AdminNotificationLayer";
+import { AdminSync } from "@/components/game/AdminSync";
 
 function NotFoundComponent() {
   return (
@@ -83,9 +87,15 @@ function AuthSync() {
 function RootComponent() {
   return (
     <AuthProvider>
-      <PwaRegistration />
-      <AuthSync />
-      <Outlet />
+      <AppTourProvider>
+        <PwaRegistration />
+        <AuthSync />
+        <MaintenanceGuard>
+          <AdminNotificationLayer />
+          <AdminSync />
+          <Outlet />
+        </MaintenanceGuard>
+      </AppTourProvider>
     </AuthProvider>
   );
 }

@@ -141,6 +141,7 @@ function HomePage() {
           initial={{ y: 20, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ type: "spring", stiffness: 280, damping: 24 }}
+          data-tour="home-hero"
           className="relative overflow-hidden rounded-3xl border border-white/15 bg-vip-grad p-5 shadow-card-game"
         >
           <div className="pointer-events-none absolute -left-10 -top-10 h-40 w-40 rounded-full bg-magenta/40 blur-3xl" />
@@ -166,7 +167,7 @@ function HomePage() {
                 <Sparkles className="h-5 w-5" /> Apri Reveal Premium
               </GameButton>
             </Link>
-            <Link to="/lobby">
+            <Link to="/lobby" data-tour="home-lobby-cta">
               <GameButton variant="magenta" size="md" block>
                 Entra in Lobby <ChevronRight className="h-5 w-5" />
               </GameButton>
@@ -299,7 +300,7 @@ function HomePage() {
                style={{ background: "radial-gradient(circle at 30% 30%, white, transparent 60%)" }} />
           <div className="relative flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-stroke-thin text-2xl font-extrabold text-purple-deep">Early Bird</h3>
+              <h3 className="text-2xl font-extrabold tracking-tight text-white drop-shadow-[0_2px_0_rgba(52,16,92,0.95)]" style={{ textShadow: "0 1px 0 rgba(255,255,255,0.15), 0 3px 8px rgba(91,33,182,0.55), 2px 2px 0 rgba(76,29,149,0.9)" }}>Early Bird</h3>
               <p className="text-xs font-bold text-purple-deep/80">
                 {earlyBirdUsed ? "Già riscattato oggi ✓" : "+50 Spark · +200 Coin · +1 Reveal"}
               </p>
@@ -328,9 +329,9 @@ function HomePage() {
       <section className="mt-6 px-3">
         <SectionLabel>Shop & Bundle</SectionLabel>
         <div className="mt-3 grid grid-cols-3 items-stretch gap-3">
-          <ShopCard img={shopTickets} title="20 Ticket" price="€4.99" />
-          <ShopCard img={shopVault} title="500 Spark" price="€6.99" />
-          <ShopCard img={shopVip} title="VIP 30gg" price="€9.99" highlight />
+          <ShopCard img={shopTickets} title="20 Ticket" price="150 Spark" />
+          <ShopCard img={shopVault} title="3 Reveal Premium" price="150 Spark" />
+          <ShopCard img={shopVip} title="VIP 30gg" price="760 Spark" highlight />
         </div>
         <Link to="/shop">
           <motion.div whileTap={{ scale: 0.97 }} className="mt-2 flex items-center justify-center gap-2 rounded-2xl border border-white/15 bg-card-game py-3 text-sm font-bold text-white/70">

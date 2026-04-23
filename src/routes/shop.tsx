@@ -2,7 +2,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { useState } from "react";
 import confetti from "canvas-confetti";
-import { ArrowLeft, Crown, Ticket, Zap, X, CreditCard, Smartphone } from "lucide-react";
+import { ArrowLeft, Crown, Ticket, Zap, X } from "lucide-react";
 import { MobileShell } from "@/components/game/MobileShell";
 import shopTickets from "@/assets/shop-tickets.png";
 import shopVault from "@/assets/shop-spark-vault.png";
@@ -29,25 +29,31 @@ interface PurchaseItem {
   action: () => void;
 }
 
+const SPARK_ICON = "⚡";
+
 // ── Purchase Confirmation Modal ──────────────────────────────
 function PurchaseModal({
   item,
+  currentSparks,
+  canAfford,
   onConfirm,
   onCancel,
 }: {
   item: PurchaseItem;
-  onConfirm: () => void;
+  currentSparks: number;
+  canAfford: boolean;
+  onConfirm: () => boolean;
   onCancel: () => void;
 }) {
   const [step, setStep] = useState<"confirm" | "paying" | "done">("confirm");
 
   function handlePay() {
+    if (!canAfford) return;
     setStep("paying");
-    // Simulate payment processing 1.5s
     setTimeout(() => {
-      onConfirm();
-      setStep("done");
-    }, 1500);
+      const ok = onConfirm();
+      setStep(ok ? "done" : "confirm");
+    }, 700);
   }
 
   return (
@@ -86,33 +92,31 @@ function PurchaseModal({
 
             <div className="mb-4 rounded-2xl border border-white/10 bg-black/30 p-4">
               <div className="flex items-center justify-between">
-                <span className="text-sm font-bold text-white/70">Totale</span>
+                <span className="text-sm font-bold text-white/70">Costo</span>
                 <span className="text-2xl font-extrabold text-gold">{item.price}</span>
               </div>
-              <p className="mt-1 text-xs text-white/40">IVA inclusa · Addebito immediato</p>
+              <div className="mt-2 flex items-center justify-between text-xs">
+                <span className="text-white/45">Saldo disponibile</span>
+                <span className="font-extrabold text-white">{currentSparks.toLocaleString("it-IT")} {SPARK_ICON}</span>
+              </div>
             </div>
 
-            {/* Payment methods */}
-            <p className="mb-2 text-xs font-bold text-white/50">Metodo di pagamento</p>
-            <div className="mb-4 grid grid-cols-2 gap-2">
-              <div className="flex items-center gap-2 rounded-xl border border-gold/30 bg-gold-shine/10 px-3 py-2.5">
-                <CreditCard className="h-4 w-4 text-gold" />
-                <span className="text-xs font-bold text-white/80">Carta di credito</span>
-              </div>
-              <div className="flex items-center gap-2 rounded-xl border border-white/15 bg-white/5 px-3 py-2.5">
-                <Smartphone className="h-4 w-4 text-white/50" />
-                <span className="text-xs font-bold text-white/40">Apple/Google Pay</span>
-              </div>
+            <div className="mb-4 rounded-2xl border border-white/10 bg-white/5 px-3 py-3">
+              <p className="text-xs font-bold text-white/75">Usa i tuoi Spark per acquistare vantaggi e pacchetti nello shop.</p>
+              {!canAfford && (
+                <p className="mt-1 text-xs font-bold text-rose-300">Spark insufficienti per questo acquisto.</p>
+              )}
             </div>
 
             <button
               onClick={handlePay}
-              className="w-full rounded-2xl bg-gold-shine py-4 text-center text-base font-extrabold text-purple-deep shadow-button-gold active:scale-98"
+              disabled={!canAfford}
+              className="w-full rounded-2xl bg-gold-shine py-4 text-center text-base font-extrabold text-purple-deep shadow-button-gold active:scale-98 disabled:cursor-not-allowed disabled:opacity-50"
             >
-              Paga {item.price}
+              Usa {item.price}
             </button>
             <p className="mt-3 text-center text-[10px] text-white/30">
-              Acquisto protetto · Nessun abbonamento nascosto
+              Prezzo espresso in Spark · Nessun addebito in euro
             </p>
           </>
         )}
@@ -124,8 +128,8 @@ function PurchaseModal({
               transition={{ duration: 1, repeat: Infinity, ease: "linear" }}
               className="h-14 w-14 rounded-full border-4 border-white/10 border-t-gold"
             />
-            <p className="text-base font-bold text-white">Elaborazione pagamento…</p>
-            <p className="text-xs text-white/50">Non chiudere questa finestra</p>
+            <p className="text-base font-bold text-white">Conferma acquisto in corso…</p>
+            <p className="text-xs text-white/50">Sto aggiornando il tuo saldo</p>
           </div>
         )}
 
@@ -158,11 +162,10 @@ function PurchaseModal({
 function ShopPage() {
   const { sfx } = useAudio();
   const addTickets = useGameStore((s) => s.addTickets);
-  const addSparks  = useGameStore((s) => s.addSparks);
-  const addCoins   = useGameStore((s) => s.addCoins);
+  const spendSparks = useGameStore((s) => s.spendSparks);
   const addPremiumReveals = useGameStore((s) => s.addPremiumReveals);
   const activateVip = useGameStore((s) => s.activateVip);
-  const { vip } = useViewerGameState();
+  const { vip, sparks } = useViewerGameState();
 
   const [pending, setPending] = useState<PurchaseItem | null>(null);
   const [toast, setToast]     = useState<string | null>(null);
@@ -178,7 +181,12 @@ function ShopPage() {
   }
 
   function confirmPurchase() {
-    if (!pending) return;
+    if (!pending) return false;
+    const ok = spendSparks(pending.priceNum);
+    if (!ok) {
+      showToast("⚠️ Spark insufficienti per completare l'acquisto");
+      return false;
+    }
     pending.action();
     sfx("purchase");
     confetti({
@@ -188,33 +196,34 @@ function ShopPage() {
       colors: ["#f5b400", "#ff3da6", "#7c3aed"],
     });
     showToast(`✅ ${pending.name} acquistato con successo!`);
+    return true;
   }
 
   // ── Item definitions ────────────────────────────────────────
   const ticketItems: PurchaseItem[] = [
-    { id: "t1", name: "5 Ticket",  description: "Entra in 5 partite di Bingo",         price: "€0.99",  priceNum: 0.99,  img: shopTickets, action: () => addTickets(5) },
-    { id: "t2", name: "15 Ticket", description: "Il pacchetto più popolare",            price: "€2.99",  priceNum: 2.99,  img: shopTickets, badge: "POPOLARE", action: () => addTickets(15) },
-    { id: "t3", name: "40 Ticket", description: "Scorte per una settimana",             price: "€6.99",  priceNum: 6.99,  img: shopTickets, badge: "BEST VALUE", action: () => addTickets(40) },
-    { id: "t4", name: "100 Ticket",description: "Per i giocatori seri",                price: "€14.99", priceNum: 14.99, img: shopTickets, badge: "VIP", action: () => addTickets(100) },
+    { id: "t1", name: "5 Ticket", description: "Entra in 5 partite di Bingo", price: "40 Spark", priceNum: 40, img: shopTickets, action: () => addTickets(5) },
+    { id: "t2", name: "15 Ticket", description: "Il pacchetto più popolare", price: "110 Spark", priceNum: 110, img: shopTickets, badge: "POPOLARE", action: () => addTickets(15) },
+    { id: "t3", name: "40 Ticket", description: "Scorte per una settimana", price: "260 Spark", priceNum: 260, img: shopTickets, badge: "BEST VALUE", action: () => addTickets(40) },
+    { id: "t4", name: "100 Ticket", description: "Per i giocatori seri", price: "620 Spark", priceNum: 620, img: shopTickets, badge: "VIP", action: () => addTickets(100) },
   ];
 
-  const sparkItems: PurchaseItem[] = [
-    { id: "s1", name: "100 Spark",  description: "Un boost veloce di Spark",           price: "€0.99",  priceNum: 0.99,  img: shopVault, action: () => addSparks(100) },
-    { id: "s2", name: "350 Spark",  description: "Pacchetto standard",                 price: "€2.99",  priceNum: 2.99,  img: shopVault, badge: "POPOLARE", action: () => addSparks(350) },
-    { id: "s3", name: "1.000 Spark",description: "Il pacchetto più conveniente",       price: "€6.99",  priceNum: 6.99,  img: shopVault, badge: "BEST VALUE", action: () => addSparks(1000) },
-    { id: "s4", name: "3.000 Spark",description: "Per dominare le classifiche",        price: "€16.99", priceNum: 16.99, img: shopVault, action: () => addSparks(3000) },
+  const utilityItems: PurchaseItem[] = [
+    { id: "u1", name: "1 Reveal Premium", description: "Una rivelazione premium extra", price: "55 Spark", priceNum: 55, img: shopVault, action: () => addPremiumReveals(1) },
+    { id: "u2", name: "3 Reveal Premium", description: "Pacchetto standard", price: "150 Spark", priceNum: 150, img: shopVault, badge: "POPOLARE", action: () => addPremiumReveals(3) },
+    { id: "u3", name: "10 Reveal Premium", description: "Il pacchetto più conveniente", price: "420 Spark", priceNum: 420, img: shopVault, badge: "BEST VALUE", action: () => addPremiumReveals(10) },
+    { id: "u4", name: "Golden Boost", description: "+25 Ticket e 2 Reveal Premium", price: "240 Spark", priceNum: 240, img: shopVault, action: () => { addTickets(25); addPremiumReveals(2); } },
   ];
 
   const vipItems: PurchaseItem[] = [
-    { id: "v7",  name: "VIP 7 giorni",  description: "+3 Reveal Premium · Room esclusive · Spark giornalieri extra",  price: "€3.99",  priceNum: 3.99,  img: shopVip, action: () => { activateVip(7);  addPremiumReveals(3);  } },
-    { id: "v30", name: "VIP 30 giorni", description: "+10 Reveal Premium · Badge VIP · Accesso a tutte le room",      price: "€9.99",  priceNum: 9.99,  img: shopVip, badge: "SCELTO", action: () => { activateVip(30); addPremiumReveals(10); } },
-    { id: "v90", name: "VIP 90 giorni", description: "+30 Reveal Premium · Tutto incluso · Risparmi il 40%",          price: "€24.99", priceNum: 24.99, img: shopVip, badge: "RISPARMIO", action: () => { activateVip(90); addPremiumReveals(30); } },
+    { id: "v7", name: "VIP 7 giorni", description: "+3 Reveal Premium · Room esclusive · Spark giornalieri extra", price: "320 Spark", priceNum: 320, img: shopVip, action: () => { activateVip(7); addPremiumReveals(3); } },
+    { id: "v30", name: "VIP 30 giorni", description: "+10 Reveal Premium · Badge VIP · Accesso a tutte le room", price: "760 Spark", priceNum: 760, img: shopVip, badge: "SCELTO", action: () => { activateVip(30); addPremiumReveals(10); } },
+    { id: "v90", name: "VIP 90 giorni", description: "+30 Reveal Premium · Tutto incluso · Risparmi il 40%", price: "1800 Spark", priceNum: 1800, img: shopVip, badge: "RISPARMIO", action: () => { activateVip(90); addPremiumReveals(30); } },
   ];
 
   const bundleItems: PurchaseItem[] = [
-    { id: "b1", name: "Golden Starter", description: "10 Ticket + 200 Spark + 1 Reveal Premium",    price: "€4.99",  priceNum: 4.99,  img: shopTickets, action: () => { addTickets(10); addSparks(200); addPremiumReveals(1); } },
-    { id: "b2", name: "VIP Bundle",     description: "30 Ticket + 1.000 Spark + VIP 7gg",           price: "€12.99", priceNum: 12.99, img: shopVip, badge: "CONSIGLIATO", action: () => { addTickets(30); addSparks(1000); activateVip(7); } },
-    { id: "b3", name: "Mega Pack",      description: "100 Ticket + 3.000 Spark + VIP 30gg",         price: "€34.99", priceNum: 34.99, img: shopVip, badge: "MIGLIORE", action: () => { addTickets(100); addSparks(3000); activateVip(30); } },
+    { id: "b1", name: "Golden Starter", description: "10 Ticket + 1 Reveal Premium", price: "120 Spark", priceNum: 120, img: shopTickets, action: () => { addTickets(10); addPremiumReveals(1); } },
+    { id: "b2", name: "VIP Bundle", description: "30 Ticket + 5 Reveal Premium + VIP 7gg", price: "560 Spark", priceNum: 560, img: shopVip, badge: "CONSIGLIATO", action: () => { addTickets(30); addPremiumReveals(5); activateVip(7); } },
+    { id: "b3", name: "Mega Pack", description: "100 Ticket + 15 Reveal Premium + VIP 30gg", price: "1450 Spark", priceNum: 1450, img: shopVip, badge: "MIGLIORE", action: () => { addTickets(100); addPremiumReveals(15); activateVip(30); } },
   ];
 
   return (
@@ -224,7 +233,9 @@ function ShopPage() {
         {pending && (
           <PurchaseModal
             item={pending}
-            onConfirm={() => { confirmPurchase(); }}
+            currentSparks={sparks}
+            canAfford={sparks >= pending.priceNum}
+            onConfirm={confirmPurchase}
             onCancel={() => setPending(null)}
           />
         )}
@@ -239,7 +250,7 @@ function ShopPage() {
         </Link>
         <div>
           <h1 className="text-stroke-game text-2xl font-extrabold text-gold">Shop</h1>
-          <p className="text-xs font-bold text-white/50">Tutti i prezzi IVA inclusa</p>
+          <p className="text-xs font-bold text-white/50">Shop interno in Spark</p>
         </div>
       </div>
 
@@ -293,10 +304,10 @@ function ShopPage() {
         </div>
       </Section>
 
-      {/* Spark Bundles */}
-      <Section label="Spark" icon={<Zap className="h-4 w-4" />}>
+      {/* Utility */}
+      <Section label="Utility" icon={<Zap className="h-4 w-4" />}>
         <div className="grid grid-cols-2 gap-2">
-          {sparkItems.map((item, i) => (
+          {utilityItems.map((item, i) => (
             <ItemCard key={item.id} item={item} delay={i * 0.04} onBuy={() => openModal(item)} />
           ))}
         </div>
@@ -312,7 +323,7 @@ function ShopPage() {
       </Section>
 
       <p className="mt-4 mb-2 px-4 text-center text-[10px] text-white/30">
-        Acquistando accetti i Termini di Servizio. Tutti i contenuti acquistati sono virtuali e non rimborsabili.
+Tutti i prezzi dello shop sono espressi in Spark. I contenuti acquistati sono virtuali e usabili nell'app.
       </p>
     </MobileShell>
   );

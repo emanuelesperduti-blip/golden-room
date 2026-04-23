@@ -32,19 +32,19 @@ interface Reward {
 }
 
 const FREE_REWARDS: Reward[] = [
-  { type: "spark", value: 30, label: "+30 Spark", emoji: "⚡", color: "oklch(0.85 0.18 90)" },
-  { type: "spark", value: 50, label: "+50 Spark", emoji: "⚡", color: "oklch(0.85 0.18 90)" },
+  { type: "spark", value: 8, label: "+8 Spark", emoji: "⚡", color: "oklch(0.85 0.18 90)" },
+  { type: "spark", value: 12, label: "+12 Spark", emoji: "⚡", color: "oklch(0.85 0.18 90)" },
   { type: "ticket", value: 1, label: "+1 Ticket", emoji: "🎫", color: "oklch(0.78 0.16 220)" },
-  { type: "coin", value: 150, label: "+150 Coin", emoji: "🪙", color: "oklch(0.7 0.25 25)" },
+  { type: "coin", value: 120, label: "+120 Coin", emoji: "🪙", color: "oklch(0.7 0.25 25)" },
 ];
 
 const PREMIUM_REWARDS: Reward[] = [
-  { type: "spark", value: 150, label: "+150 Spark", emoji: "⚡", color: "oklch(0.85 0.18 90)" },
-  { type: "spark", value: 300, label: "+300 Spark", emoji: "🌟", color: "oklch(0.85 0.18 90)" },
-  { type: "ticket", value: 3, label: "+3 Ticket", emoji: "🎫", color: "oklch(0.78 0.16 220)" },
-  { type: "ticket", value: 5, label: "+5 Ticket", emoji: "🎟️", color: "oklch(0.78 0.16 220)" },
-  { type: "gem", value: 2, label: "+2 Gemme", emoji: "💎", color: "oklch(0.72 0.28 250)" },
-  { type: "coin", value: 500, label: "+500 Coin", emoji: "🪙", color: "oklch(0.7 0.25 25)" },
+  { type: "spark", value: 35, label: "+35 Spark", emoji: "⚡", color: "oklch(0.85 0.18 90)" },
+  { type: "spark", value: 60, label: "+60 Spark", emoji: "🌟", color: "oklch(0.85 0.18 90)" },
+  { type: "ticket", value: 2, label: "+2 Ticket", emoji: "🎫", color: "oklch(0.78 0.16 220)" },
+  { type: "ticket", value: 3, label: "+3 Ticket", emoji: "🎟️", color: "oklch(0.78 0.16 220)" },
+  { type: "gem", value: 1, label: "+1 Gemma", emoji: "💎", color: "oklch(0.72 0.28 250)" },
+  { type: "coin", value: 250, label: "+250 Coin", emoji: "🪙", color: "oklch(0.7 0.25 25)" },
   { type: "premium_reveal", value: 1, label: "+1 Reveal Extra", emoji: "🎁", color: "oklch(0.7 0.28 350)" },
 ];
 

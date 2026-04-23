@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Crown, Flame, Trophy, Star, Award, Zap, Edit2, Check, LogOut, LogIn, Palette, Download } from "lucide-react";
 import { MobileShell } from "@/components/game/MobileShell";
 import { Badge } from "@/components/game/Badge";
@@ -8,6 +8,7 @@ import sparkIcon from "@/assets/icon-spark.png";
 import coinIcon from "@/assets/icon-coin.png";
 import { useGameStore } from "@/lib/gameStore";
 import { useAuth } from "@/hooks/useAuth";
+import { isAdminUser } from "@/lib/admin";
 import { useViewerGameState } from "@/hooks/useViewerGameState";
 import { resetPwaBannerDismissal } from "@/hooks/usePwaInstall";
 
@@ -32,8 +33,27 @@ const BADGES_CONFIG = [
 
 const AVATAR_OPTIONS = ["👑", "🎰", "🃏", "🦁", "🐯", "🦊", "🐸", "👾", "🤖", "🎭", "🎪", "🌟"];
 
+const SPARK_ESTIMATED_EUR = 0.01;
+
+function formatSparkEuro(value: number) {
+  return new Intl.NumberFormat("it-IT", { style: "currency", currency: "EUR" }).format(value);
+}
+
+function buildSparkProjection(balance: number) {
+  const safeBalance = Math.max(balance, 0);
+  const base = safeBalance * SPARK_ESTIMATED_EUR;
+  const multipliers = [0.72, 0.8, 0.86, 0.91, 0.95, 1, 1.05];
+
+  return multipliers.map((multiplier, index) => ({
+    label: ["Lun", "Mar", "Mer", "Gio", "Ven", "Ora", "+1"][index],
+    value: Number((base * multiplier).toFixed(2)),
+  }));
+}
+
+
 function ProfilePage() {
   const { user, signOut } = useAuth();
+  const isAdmin = isAdminUser(user);
   const {
     isGuest,
     username,
@@ -59,6 +79,9 @@ function ProfilePage() {
   const unlockedCount = BADGES_CONFIG.filter((b) => b.req(badgeState)).length;
   const completedMissions = isGuest ? 0 : Object.values(missions).filter((m) => m.claimed).length;
   const xpInLevel = xp % 100;
+  const sparkEstimatedValue = sparks * SPARK_ESTIMATED_EUR;
+  const sparkProjection = useMemo(() => buildSparkProjection(sparks), [sparks]);
+  const maxProjection = Math.max(...sparkProjection.map((point) => point.value), 0.01);
 
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(username);
@@ -197,7 +220,15 @@ function ProfilePage() {
           </div>
 
           {/* Auth actions */}
-          <div className="mt-4 flex gap-2 justify-center">
+          <div className="mt-4 flex flex-wrap gap-2 justify-center">
+            {isAdmin && user ? (
+              <Link to="/admin">
+                <button className="flex items-center gap-2 rounded-xl border border-cyan-300/30 bg-[linear-gradient(135deg,rgba(63,191,255,0.28),rgba(55,33,122,0.85))] px-4 py-2 text-xs font-extrabold text-white shadow-[0_0_20px_rgba(63,191,255,0.2)]">
+                  <Crown className="h-3.5 w-3.5" />
+                  Entra nel pannello ADMIN
+                </button>
+              </Link>
+            ) : null}
             {user ? (
               <button
                 onClick={handleSignOut}
@@ -223,7 +254,7 @@ function ProfilePage() {
       </section>
 
       {/* Stats grid */}
-      <section className="mt-4 px-4">
+      <section className="mt-4 px-4" data-tour="profile-stats">
         <div className="grid grid-cols-3 gap-2">
           <StatCard value={sparks} label="Spark" img={sparkIcon} />
           <StatCard value={tickets} label="Ticket" emoji="🎫" />
@@ -232,6 +263,83 @@ function ProfilePage() {
           <StatCard value={revealsOpened} label="Reveal" emoji="✨" />
           <StatCard value={completedMissions} label="Missioni" emoji="🎯" />
         </div>
+      </section>
+
+
+      {/* Spark token */}
+      <section className="mt-4 px-4" data-tour="profile-spark-token">
+        <SectionLabel>Spark token</SectionLabel>
+        <motion.div
+          initial={{ y: 12, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          className="mt-3 overflow-hidden rounded-3xl border border-gold/20 bg-[linear-gradient(160deg,oklch(0.24_0.09_310/0.95),oklch(0.16_0.06_260/0.98))] p-4 shadow-card-game"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-gold/25 bg-black/20 px-3 py-1">
+                <img src={sparkIcon} alt="Spark" className="h-4 w-4" />
+                <span className="text-[11px] font-extrabold uppercase tracking-[0.18em] text-gold">Pre-market token</span>
+              </div>
+              <h3 className="mt-3 text-xl font-extrabold text-white">Spark è il meme/token di Golden Room</h3>
+              <p className="mt-1 text-xs font-semibold leading-relaxed text-white/70">
+                Oggi vedi un valore stimato pre-market. Quando Spark sarà sul mercato, il prezzo reale verrà deciso dagli scambi.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-right">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">Stato</p>
+              <p className="mt-1 text-sm font-extrabold text-gold">Pre-market</p>
+            </div>
+          </div>
+
+          <div className="mt-4 grid grid-cols-2 gap-3">
+            <div className="rounded-2xl border border-white/10 bg-black/20 p-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-white/45">Saldo spark</p>
+              <div className="mt-2 flex items-center gap-2">
+                <img src={sparkIcon} alt="Spark" className="h-5 w-5" />
+                <span className="text-2xl font-extrabold text-white">{sparks.toLocaleString("it-IT")}</span>
+              </div>
+            </div>
+            <div className="rounded-2xl border border-gold/20 bg-[linear-gradient(135deg,oklch(0.3_0.09_60/0.45),oklch(0.18_0.08_300/0.35))] p-3">
+              <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-gold/80">Valore stimato</p>
+              <p className="mt-2 text-2xl font-extrabold text-gold">{formatSparkEuro(sparkEstimatedValue)}</p>
+              <p className="mt-1 text-[10px] font-bold text-white/55">1 SPARK ≈ {formatSparkEuro(SPARK_ESTIMATED_EUR)} · valore indicativo</p>
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-white/10 bg-black/20 p-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-extrabold text-white">Andamento Spark</p>
+                <p className="text-[11px] font-bold text-white/50">Simulazione pre-market, non prezzo reale di mercato</p>
+              </div>
+              <div className="rounded-full border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.16em] text-cyan-100">Stimato</div>
+            </div>
+
+            <div className="mt-4 flex h-32 items-end gap-2">
+              {sparkProjection.map((point, index) => (
+                <div key={point.label} className="flex flex-1 flex-col items-center gap-2">
+                  <div className="text-[10px] font-bold text-white/60">{formatSparkEuro(point.value)}</div>
+                  <div className="flex h-20 w-full items-end rounded-2xl bg-white/5 px-1.5 py-1.5">
+                    <motion.div
+                      initial={{ height: 0 }}
+                      animate={{ height: `${Math.max(16, (point.value / maxProjection) * 100)}%` }}
+                      transition={{ duration: 0.45, delay: index * 0.04 }}
+                      className="w-full rounded-xl bg-[linear-gradient(180deg,oklch(0.82_0.16_215),oklch(0.66_0.2_300),oklch(0.74_0.18_90))] shadow-[0_0_18px_oklch(0.82_0.16_215/0.28)]"
+                    />
+                  </div>
+                  <div className="text-[10px] font-bold uppercase tracking-[0.14em] text-white/40">{point.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="mt-4 rounded-2xl border border-white/10 bg-black/15 p-3">
+            <p className="text-xs font-extrabold text-white">Come comunicarlo all'utente</p>
+            <p className="mt-1 text-[11px] font-semibold leading-relaxed text-white/65">
+              Spark è il token dell'ecosistema Golden Room. Il valore mostrato nel profilo è indicativo e serve a raccontare il progetto prima del listing.
+            </p>
+          </div>
+        </motion.div>
       </section>
 
       {/* Badges */}

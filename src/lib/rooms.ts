@@ -38,6 +38,13 @@ export interface RoomConfig {
   glow: string;
 }
 
+
+
+export interface RoomPopulation {
+  total: number;
+  botCount: number;
+}
+
 export interface RoomTimeline {
   phase: RoomPhase;
   cycleIndex: number;
@@ -49,6 +56,17 @@ export interface RoomTimeline {
   upcomingRoundIndex: number;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// NOTA: playingSec deve coprire TUTTE le estrazioni: maxNumber × drawIntervalMs
+//   neon-newcomer : 60 × 2400ms = 144 000ms → playingSec = 144
+//   night-rush    : 75 × 2300ms = 172 500ms → playingSec = 173 (ceil)
+//   golden-city   : 90 × 2600ms = 234 000ms → playingSec = 234
+//   royal-vip     : 90 × 2800ms = 252 000ms → playingSec = 252
+//   mega-jackpot  : 90 × 2600ms = 234 000ms → playingSec = 234
+// Questo garantisce che TUTTI i numeri vengano estratti in ogni partita e che
+// ci sia SEMPRE un vincitore, rendendo funzionale sia la modale BINGO sia la
+// cronologia vittorie nella lobby.
+// ─────────────────────────────────────────────────────────────────────────────
 export const ROOMS: RoomConfig[] = [
   {
     id: "neon-newcomer",
@@ -56,14 +74,14 @@ export const ROOMS: RoomConfig[] = [
     subtitle: "Free room — perfetta per iniziare",
     img: nightBingo,
     tier: "free",
-    cycleSec: 60,
-    waitingSec: 24,
-    playingSec: 30,
-    finishedSec: 6,
-    drawIntervalMs: 2200,
+    cycleSec: 336,      // 180 + 144 + 12
+    waitingSec: 180,
+    playingSec: 144,    // 60 numeri × 2 400ms = 144 000ms esatti
+    finishedSec: 12,
+    drawIntervalMs: 2400,
     ticketCost: 0,
-    sparkReward: 20,
-    ticketReward: 1,
+    sparkReward: 6,
+    ticketReward: 0,
     maxNumber: 60,
     cardSize: 3,
     badges: ["new", "free"],
@@ -76,13 +94,13 @@ export const ROOMS: RoomConfig[] = [
     subtitle: "Veloce, divertente, infinito",
     img: nightBingo,
     tier: "standard",
-    cycleSec: 90,
-    waitingSec: 32,
-    playingSec: 50,
-    finishedSec: 8,
-    drawIntervalMs: 1800,
+    cycleSec: 365,      // 180 + 173 + 12
+    waitingSec: 180,
+    playingSec: 173,    // 75 numeri × 2 300ms = 172 500ms → ceil → 173
+    finishedSec: 12,
+    drawIntervalMs: 2300,
     ticketCost: 1,
-    sparkReward: 60,
+    sparkReward: 14,
     ticketReward: 1,
     maxNumber: 75,
     cardSize: 5,
@@ -96,14 +114,14 @@ export const ROOMS: RoomConfig[] = [
     subtitle: "La room dei big winners",
     img: goldenCity,
     tier: "premium",
-    cycleSec: 180,
-    waitingSec: 68,
-    playingSec: 100,
-    finishedSec: 12,
-    drawIntervalMs: 2500,
+    cycleSec: 430,      // 180 + 234 + 16
+    waitingSec: 180,
+    playingSec: 234,    // 90 numeri × 2 600ms = 234 000ms esatti
+    finishedSec: 16,
+    drawIntervalMs: 2600,
     ticketCost: 2,
-    sparkReward: 180,
-    ticketReward: 2,
+    sparkReward: 36,
+    ticketReward: 1,
     maxNumber: 90,
     cardSize: 4,
     badges: ["live", "hot"],
@@ -116,14 +134,14 @@ export const ROOMS: RoomConfig[] = [
     subtitle: "Solo per i veri Re — reward x3",
     img: vipCrown,
     tier: "vip",
-    cycleSec: 300,
-    waitingSec: 108,
-    playingSec: 178,
-    finishedSec: 14,
-    drawIntervalMs: 3000,
+    cycleSec: 450,      // 180 + 252 + 18
+    waitingSec: 180,
+    playingSec: 252,    // 90 numeri × 2 800ms = 252 000ms esatti
+    finishedSec: 18,
+    drawIntervalMs: 2800,
     ticketCost: 5,
-    sparkReward: 600,
-    ticketReward: 5,
+    sparkReward: 90,
+    ticketReward: 2,
     maxNumber: 90,
     cardSize: 5,
     badges: ["live", "vip"],
@@ -136,14 +154,14 @@ export const ROOMS: RoomConfig[] = [
     subtitle: "Una partita ogni 10 minuti, jackpot enorme",
     img: vipCrown,
     tier: "jackpot",
-    cycleSec: 600,
+    cycleSec: 464,      // 210 + 234 + 20
     waitingSec: 210,
-    playingSec: 374,
-    finishedSec: 16,
-    drawIntervalMs: 3500,
+    playingSec: 234,    // 90 numeri × 2 600ms = 234 000ms esatti
+    finishedSec: 20,
+    drawIntervalMs: 2600,
     ticketCost: 10,
-    sparkReward: 2500,
-    ticketReward: 10,
+    sparkReward: 300,
+    ticketReward: 3,
     maxNumber: 90,
     cardSize: 5,
     badges: ["vip", "hot"],
@@ -159,7 +177,32 @@ for (const room of ROOMS) {
 }
 
 export function getRoom(id: string | undefined): RoomConfig {
-  return ROOMS.find((r) => r.id === id) ?? ROOMS[1];
+  const baseRoom = ROOMS.find((r) => r.id === id) ?? ROOMS[1];
+  
+  // Inject admin overrides if available in localStorage
+  if (typeof window !== "undefined") {
+    try {
+      const adminData = JSON.parse(window.localStorage.getItem("golden-room-admin-v1") || "{}");
+      const overrides = adminData.state?.roomConfigs?.[baseRoom.id];
+      if (overrides) {
+        return {
+          ...baseRoom,
+          waitingSec: overrides.countdownDuration ?? baseRoom.waitingSec,
+          playingSec: overrides.gameDuration ?? baseRoom.playingSec,
+          ticketCost: overrides.ticketCost ?? baseRoom.ticketCost,
+          sparkReward: overrides.sparkReward ?? baseRoom.sparkReward,
+          // Recalculate cycleSec if timings changed
+          cycleSec: (overrides.countdownDuration ?? baseRoom.waitingSec) + 
+                    (overrides.gameDuration ?? baseRoom.playingSec) + 
+                    baseRoom.finishedSec
+        };
+      }
+    } catch (e) {
+      // Ignore errors
+    }
+  }
+  
+  return baseRoom;
 }
 
 /** Anchor: Jan 1 2024 UTC. Each room cycles deterministically so all players are in sync. */
@@ -215,20 +258,87 @@ export function secondsToNextRound(room: RoomConfig, now = Date.now()): number {
   return getRoomTimeline(room, now).secondsToNextRound;
 }
 
-/** Seeded RNG so every player in a room sees the same draws for the same round. */
-function mulberry32(seed: number) {
+/**
+ * Numero massimo di estrazioni per una partita.
+ * DEVE essere uguale a room.maxNumber: solo estraendo TUTTI i numeri si
+ * garantisce che ogni round abbia sempre un vincitore e che la modale BINGO
+ * e la cronologia lobby funzionino correttamente.
+ * Il playingSec di ogni room è calibrato esattamente per coprire queste estrazioni.
+ */
+export function maxDrawsForRoom(room: RoomConfig): number {
+  return room.maxNumber;
+}
+
+export function getRoomPopulation(room: RoomConfig, now = Date.now()): RoomPopulation {
+  const timeline = getRoomTimeline(room, now);
+  const ranges: Record<RoomTier, [number, number]> = {
+    free: [9, 16],
+    standard: [7, 14],
+    premium: [6, 12],
+    vip: [4, 9],
+    jackpot: [3, 7],
+  };
+  const [min, max] = ranges[room.tier];
+  const rng = createDeterministicRng('population', room.id, timeline.activeRoundIndex);
+  const total = min + Math.floor(rng() * (max - min + 1));
+  const botCount = Math.max(0, total - 1);
+  return { total, botCount };
+}
+
+/**
+ * Stronger deterministic RNG.
+ *
+ * We keep the extraction stable for the same room + round so every player in the
+ * same sala sees the same sequence, but the sequence is now derived from a richer
+ * hash instead of a simple arithmetic seed. This makes rooms diverge more clearly
+ * and avoids visibly repetitive patterns across nearby rounds.
+ */
+function hashStringToSeedParts(value: string): [number, number, number, number] {
+  let h1 = 1779033703;
+  let h2 = 3144134277;
+  let h3 = 1013904242;
+  let h4 = 2773480762;
+
+  for (let i = 0; i < value.length; i++) {
+    const k = value.charCodeAt(i);
+    h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
+    h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);
+    h3 = h4 ^ Math.imul(h3 ^ k, 951274213);
+    h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
+  }
+
+  h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+  h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+  h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+  h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+
+  return [(h1 ^ h2 ^ h3 ^ h4) >>> 0, (h2 ^ h1) >>> 0, (h3 ^ h1) >>> 0, (h4 ^ h1) >>> 0];
+}
+
+function sfc32(a: number, b: number, c: number, d: number) {
   return function () {
-    let t = (seed += 0x6d2b79f5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    a >>>= 0;
+    b >>>= 0;
+    c >>>= 0;
+    d >>>= 0;
+    const t = (a + b + d) >>> 0;
+    d = (d + 1) >>> 0;
+    a = b ^ (b >>> 9);
+    b = (c + (c << 3)) >>> 0;
+    c = ((c << 21) | (c >>> 11)) >>> 0;
+    c = (c + t) >>> 0;
+    return t / 4294967296;
   };
 }
 
-/** Generate the full draw order for a specific round (shared across players). */
+function createDeterministicRng(...parts: Array<string | number>) {
+  const [a, b, c, d] = hashStringToSeedParts(parts.join('|'));
+  return sfc32(a, b, c, d);
+}
+
+/** Generate the full draw order for a specific round (shared across players in that room). */
 export function drawOrderForRound(room: RoomConfig, roundIndex: number): number[] {
-  const seed = (room.id.split("").reduce((a, c) => a + c.charCodeAt(0), 0) * 7919 + roundIndex) >>> 0;
-  const rng = mulberry32(seed);
+  const rng = createDeterministicRng('draw-order', room.id, room.maxNumber, room.cardSize, roundIndex);
   const pool = Array.from({ length: room.maxNumber }, (_, i) => i + 1);
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
@@ -255,8 +365,7 @@ export function maxCardsPerRoom(room: RoomConfig): number {
 
 /** Generate a deterministic card for the player in a specific round and slot. */
 export function cardForRound(room: RoomConfig, playerSeed: number, roundIndex: number, slot = 0): number[] {
-  const seed = (playerSeed * 31 + roundIndex * 1009 + slot * 65537) >>> 0;
-  const rng = mulberry32(seed);
+  const rng = createDeterministicRng('card', room.id, playerSeed, roundIndex, slot, room.maxNumber, room.cardSize);
   const pool = Array.from({ length: room.maxNumber }, (_, i) => i + 1);
   for (let i = pool.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
