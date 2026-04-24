@@ -10,6 +10,7 @@ import { useAudio } from "@/hooks/useAudio";
 import { useGameStore } from "@/lib/gameStore";
 import { recentBotWins, BOTS } from "@/lib/bots";
 import { getControlledRoomPopulation, getBotConfigForRoom } from "@/lib/admin";
+import { LuckyStrikeModal } from "@/components/game/LuckyStrikeModal";
 
 export const Route = createFileRoute("/lobby")({
   head: () => ({
@@ -33,6 +34,7 @@ let activityId = 0;
 function LobbyPage() {
   const progressMission = useGameStore((s) => s.progressMission);
   const [now, setNow] = useState(() => Date.now());
+  const [luckyOpen, setLuckyOpen] = useState(false);
   const [activity, setActivity] = useState<ActivityItem[]>(() => {
     return ROOMS.slice(0, 3)
       .flatMap((r) =>
@@ -130,6 +132,43 @@ function LobbyPage() {
       </section>
 
       <div className="h-6" />
+
+      {/* ── Lucky Strike FAB – bottom-left floating button ── */}
+      <motion.button
+        initial={{ scale: 0, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        transition={{ delay: 0.4, type: "spring", stiffness: 300, damping: 22 }}
+        whileTap={{ scale: 0.9 }}
+        whileHover={{ scale: 1.08 }}
+        onClick={() => setLuckyOpen(true)}
+        aria-label="Lucky Strike – Gratta e Vinci"
+        className="fixed bottom-28 left-4 z-40 flex flex-col items-center gap-1"
+      >
+        <div
+          className="relative flex h-16 w-16 items-center justify-center rounded-2xl"
+          style={{
+            background: "linear-gradient(135deg, #4a1c8a 0%, #6d28d9 60%, #7c3aed 100%)",
+            border: "2.5px solid rgba(245,180,0,0.6)",
+            boxShadow: "0 0 20px rgba(138,43,226,0.6), 0 4px 12px rgba(0,0,0,0.5)",
+          }}
+        >
+          {/* Glow pulse ring */}
+          <motion.div
+            className="absolute inset-0 rounded-2xl"
+            animate={{ boxShadow: ["0 0 0px rgba(245,180,0,0)", "0 0 14px rgba(245,180,0,0.6)", "0 0 0px rgba(245,180,0,0)"] }}
+            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
+          />
+          <span className="text-3xl drop-shadow-lg" role="img" aria-label="gratta e vinci">🎰</span>
+        </div>
+        <span
+          className="rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white"
+          style={{ background: "rgba(138,43,226,0.8)", border: "1px solid rgba(245,180,0,0.4)" }}
+        >
+          Lucky Strike
+        </span>
+      </motion.button>
+
+      <LuckyStrikeModal open={luckyOpen} onClose={() => setLuckyOpen(false)} />
     </MobileShell>
   );
 }
