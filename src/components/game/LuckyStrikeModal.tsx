@@ -140,55 +140,104 @@ function ScratchCell({ prize,revealed,onReveal,disabled,isWinner,isNearWin,onScr
 }) {
   const canvasRef=useRef<HTMLCanvasElement>(null);
   const drawing=useRef(false);
+  const revealedOnce=useRef(false);
+  const strokeCount=useRef(0);
 
-  useEffect(()=>{
+  const paintCover=useCallback(()=>{
     const canvas=canvasRef.current; if(!canvas)return;
-    const ctx=canvas.getContext("2d"); if(!ctx)return;
+    const ctx=canvas.getContext("2d", { willReadFrequently:true }); if(!ctx)return;
     const W=canvas.width, H=canvas.height;
+    ctx.globalCompositeOperation="source-over";
+    ctx.clearRect(0,0,W,H);
     const img=new window.Image();
     img.src=lsScratch;
     img.onload=()=>{
+      ctx.globalCompositeOperation="source-over";
+      ctx.clearRect(0,0,W,H);
       ctx.drawImage(img,0,0,W,H);
-      ctx.fillStyle="rgba(40,55,80,0.62)";
-      ctx.font=`bold ${Math.round(W*0.22)}px system-ui`;
+      ctx.fillStyle="rgba(30,45,70,0.62)";
+      ctx.font=`bold ${Math.round(W*0.24)}px system-ui`;
       ctx.textAlign="center"; ctx.textBaseline="middle";
       ctx.fillText("?",W/2,H/2+2);
     };
     img.onerror=()=>{
       const g=ctx.createLinearGradient(0,0,W,H);
-      g.addColorStop(0,"#b8c2cc"); g.addColorStop(0.5,"#e0e8f0"); g.addColorStop(1,"#a8b4c0");
+      g.addColorStop(0,"#f8fafc"); g.addColorStop(0.32,"#aeb7c3"); g.addColorStop(0.55,"#eef2f7"); g.addColorStop(1,"#8f9baa");
       ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
-      ctx.fillStyle="rgba(40,55,80,0.6)"; ctx.font=`bold ${Math.round(W*0.22)}px system-ui`;
-      ctx.textAlign="center"; ctx.textBaseline="middle"; ctx.fillText("?",W/2,H/2+2);
+      ctx.fillStyle="rgba(30,45,70,0.62)";
+      ctx.font=`bold ${Math.round(W*0.24)}px system-ui`;
+      ctx.textAlign="center"; ctx.textBaseline="middle";
+      ctx.fillText("?",W/2,H/2+2);
     };
   },[]);
 
   useEffect(()=>{
-    if(!revealed)return;
-    const canvas=canvasRef.current; if(!canvas)return;
-    const ctx=canvas.getContext("2d"); if(!ctx)return;
-    ctx.clearRect(0,0,canvas.width,canvas.height);
-  },[revealed]);
+    revealedOnce.current=false;
+    strokeCount.current=0;
+    if(revealed){
+      const canvas=canvasRef.current; if(!canvas)return;
+      const ctx=canvas.getContext("2d"); if(!ctx)return;
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+    } else {
+      paintCover();
+    }
+  },[revealed,paintCover]);
 
-  const scratch=useCallback((cx:number,cy:number)=>{
-    if(disabled||revealed)return;
+  const scratchAt=useCallback((clientX:number,clientY:number)=>{
+    if(disabled||revealed||revealedOnce.current)return;
     const canvas=canvasRef.current; if(!canvas)return;
-    const ctx=canvas.getContext("2d"); if(!ctx)return;
+    const ctx=canvas.getContext("2d", { willReadFrequently:true }); if(!ctx)return;
     const rect=canvas.getBoundingClientRect();
-    const x=((cx-rect.left)/rect.width)*canvas.width;
-    const y=((cy-rect.top)/rect.height)*canvas.height;
+    const x=((clientX-rect.left)/rect.width)*canvas.width;
+    const y=((clientY-rect.top)/rect.height)*canvas.height;
+    if(x<0||y<0||x>canvas.width||y>canvas.height)return;
+
+    ctx.save();
     ctx.globalCompositeOperation="destination-out";
-    ctx.beginPath(); ctx.arc(x,y,28,0,Math.PI*2); ctx.fill();
+    ctx.beginPath();
+    ctx.arc(x,y,22,0,Math.PI*2);
+    ctx.fill();
+    ctx.restore();
     onScratchSfx();
+
+    strokeCount.current += 1;
+    if(strokeCount.current % 6 !== 0) return;
+
     const data=ctx.getImageData(0,0,canvas.width,canvas.height).data;
-    let t=0; for(let i=3;i<data.length;i+=4) if(data[i]<128)t++;
-    if(t/(canvas.width*canvas.height)>0.4) onReveal();
+    let cleared=0;
+    for(let i=3;i<data.length;i+=4) if(data[i]<80) cleared++;
+    const ratio=cleared/(canvas.width*canvas.height);
+
+    // SICUREZZA: questa cella può rivelare solo se stessa, una sola volta.
+    // Niente reveal globale automatico mentre l'utente gratta.
+    if(ratio>0.46){
+      revealedOnce.current=true;
+      drawing.current=false;
+      onReveal();
+    }
   },[disabled,revealed,onReveal,onScratchSfx]);
+
+  const startDraw=(e:React.PointerEvent<HTMLCanvasElement>)=>{
+    if(disabled||revealed||revealedOnce.current)return;
+    e.preventDefault(); e.stopPropagation();
+    drawing.current=true;
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+    scratchAt(e.clientX,e.clientY);
+  };
+  const moveDraw=(e:React.PointerEvent<HTMLCanvasElement>)=>{
+    if(!drawing.current)return;
+    e.preventDefault(); e.stopPropagation();
+    scratchAt(e.clientX,e.clientY);
+  };
+  const endDraw=(e:React.PointerEvent<HTMLCanvasElement>)=>{
+    e.preventDefault(); e.stopPropagation();
+    drawing.current=false;
+    e.currentTarget.releasePointerCapture?.(e.pointerId);
+  };
 
   return (
     <div style={{
       position:"relative", overflow:"hidden", borderRadius:14,
-      // NO aspect-ratio: fills the grid cell (which is square due to gridTemplateRows)
       background: isWinner&&revealed ? "radial-gradient(circle at 40% 35%,#4c1d9a,#2d0a70)" : "radial-gradient(circle at 40% 35%,#2e1268,#180840)",
       border: isWinner&&revealed ? `2px solid ${prize.color}` : "2px solid rgba(130,70,220,0.45)",
       animation: isWinner&&revealed ? "ls-mglow 1.2s ease-in-out infinite" : isNearWin ? "ls-near 0.6s ease-in-out infinite" : "ls-breathe 2.5s ease-in-out infinite",
@@ -205,14 +254,12 @@ function ScratchCell({ prize,revealed,onReveal,disabled,isWinner,isNearWin,onScr
       )}
       <canvas ref={canvasRef} width={120} height={120}
         className="absolute inset-0 h-full w-full touch-none"
-        style={{borderRadius:12,cursor:disabled||revealed?"default":"crosshair"}}
-        onMouseDown={()=>{drawing.current=true;}}
-        onMouseUp={()=>{drawing.current=false;}}
-        onMouseLeave={()=>{drawing.current=false;}}
-        onMouseMove={e=>{if(drawing.current)scratch(e.clientX,e.clientY);}}
-        onTouchStart={e=>{drawing.current=true;scratch(e.touches[0].clientX,e.touches[0].clientY);}}
-        onTouchMove={e=>{e.preventDefault();scratch(e.touches[0].clientX,e.touches[0].clientY);}}
-        onTouchEnd={()=>{drawing.current=false;}}
+        style={{borderRadius:12,cursor:disabled||revealed?"default":"crosshair",display:revealed?"none":"block",touchAction:"none"}}
+        onPointerDown={startDraw}
+        onPointerMove={moveDraw}
+        onPointerUp={endDraw}
+        onPointerCancel={endDraw}
+        onPointerLeave={(e)=>{ if(drawing.current) endDraw(e); }}
       />
     </div>
   );
@@ -431,7 +478,6 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
                     width:"auto",
                     maxWidth:"92%",
                     objectFit:"contain",
-                    mixBlendMode:"screen",
                     filter:"drop-shadow(0 3px 16px rgba(245,180,0,0.5))",
                   }}/>
                 </div>
@@ -539,7 +585,7 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
                 {/* Buttons */}
                 <div style={{flexShrink:0,display:"flex",gap:"clamp(8px,1.5svh,12px)",padding:`0 10px`}}>
                   {phase==="idle"    && (<><GoldBtn onClick={handlePlay} disabled={sparks<COST} flex1>🎰 PLAY</GoldBtn><GoldBtn onClick={onClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
-                  {phase==="playing" && (<><GoldBtn onClick={claimAll} flex1 variant="magenta">✨ CLAIM</GoldBtn><GoldBtn onClick={onClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
+                  {phase==="playing" && (<><GoldBtn onClick={onClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
                   {phase==="result"  && (<><GoldBtn onClick={reset} disabled={sparks<COST} flex1>🎰 RIGIOCA</GoldBtn><GoldBtn onClick={onClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
                 </div>
 
