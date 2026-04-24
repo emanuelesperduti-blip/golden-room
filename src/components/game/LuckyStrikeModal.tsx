@@ -147,6 +147,7 @@ function ScratchCell({ prize,revealed,onReveal,disabled,isWinner,isNearWin,onScr
   const revealedOnce=useRef(false);
   const strokeCount=useRef(0);
   const lastPoint=useRef<{x:number;y:number}|null>(null);
+  void isNearWin; // prop mantenuta per compatibilità, ma nessuna animazione viene applicata alla casella.
 
   const paintCover=useCallback(()=>{
     const canvas=canvasRef.current; if(!canvas)return;
@@ -271,19 +272,12 @@ function ScratchCell({ prize,revealed,onReveal,disabled,isWinner,isNearWin,onScr
       position:"relative", overflow:"hidden", borderRadius:14,
       background: isWinner&&revealed ? "radial-gradient(circle at 40% 35%,#4c1d9a,#2d0a70)" : "radial-gradient(circle at 40% 35%,#2e1268,#180840)",
       border: isWinner&&revealed ? `2px solid ${prize.color}` : "2px solid rgba(130,70,220,0.45)",
-      // Durante la grattata la casella resta ferma: niente wobble/scale che disturbano il dito.
-      animation: isWinner&&revealed ? "ls-mglow 1.2s ease-in-out infinite" : isNearWin ? "ls-near 0.6s ease-in-out infinite" : undefined,
+      // Casella sempre ferma: nessuna animazione su scale/glow/shake durante la grattata.
     }}>
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5"
-        style={revealed?{animation:"ls-pop 0.5s ease-out both"}:{}}>
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
         <PrizeIcon prize={prize} size={Math.min(40,32)} />
         <span style={{fontSize:"clamp(8px,1.2svh,11px)",fontWeight:800,color:prize.color}}>{prize.label}</span>
       </div>
-      {!revealed && (
-        <div className="pointer-events-none absolute inset-0 overflow-hidden" style={{borderRadius:12}} aria-hidden>
-          <div style={{position:"absolute",top:0,bottom:0,width:"45%",background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.32),transparent)",animation:`ls-shimmer 2.4s ease-in-out infinite`}} />
-        </div>
-      )}
       <canvas ref={canvasRef} width={120} height={120}
         className="absolute inset-0 h-full w-full touch-none"
         style={{borderRadius:12,cursor:disabled||revealed?"default":"crosshair",display:revealed?"none":"block",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none"}}
@@ -314,6 +308,7 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
   const [toast,setToast]           = useState<string|null>(null);
   const [winFlash,setWinFlash]     = useState(false);
   const [nearWin,setNearWin]       = useState<Set<number>>(new Set());
+  const awardLock = useRef(false);
 
   const lastSfx=useRef(0);
   const scratchSfx=useCallback(()=>{
@@ -336,6 +331,7 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
     }
     if(sparks<COST){ sfx("error"); showToast(`Servono ${COST} Spark!`); return; }
     spendSparks(COST); sfx("purchase");
+    awardLock.current = false;
     const {prizes,winnerSymbol:ws}=buildGrid(0.22);
     setGrid(prizes); setWinnerSym(ws);
     setRevealed(new Array(6).fill(false));
@@ -346,19 +342,24 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
     if(revealed[i])return;
     sfx("reveal");
     const next=[...revealed]; next[i]=true; setRevealed(next);
-    if(winnerSymbol&&!winner){
+    if(winnerSymbol && !awardLock.current){
       const cnt=grid.filter((p,j)=>next[j]&&p.symbol===winnerSymbol).length;
+      // Niente shake/animazioni sulle caselle: segnaliamo solo internamente il near-win.
       if(cnt===2){ const sh=new Set<number>(); grid.forEach((p,j)=>{if(!next[j]&&p.symbol===winnerSymbol)sh.add(j);}); setNearWin(sh); }
       if(cnt>=3){
+        awardLock.current = true;
         const w=grid.find(p=>p.symbol===winnerSymbol)!;
         setWinner(w); addSparks(w.value); sfx("win");
+        setRevealed(new Array(6).fill(true));
+        setPhase("result");
         setWinFlash(true); setTimeout(()=>setWinFlash(false),700);
         setTimeout(()=>{
-          confetti({particleCount:260,spread:100,origin:{y:0.45},colors:["#f5b400","#ff3da6","#7c3aed","#67e8f9","#22c55e"]});
-          setTimeout(()=>confetti({particleCount:90,spread:60,origin:{y:0.55,x:0.2},colors:["#f5b400","#fde68a"]}),300);
-          setTimeout(()=>confetti({particleCount:90,spread:60,origin:{y:0.55,x:0.8},colors:["#ff3da6","#a855f7"]}),500);
+          confetti({particleCount:220,spread:95,origin:{y:0.45},colors:["#f5b400","#ff3da6","#7c3aed","#67e8f9","#22c55e"]});
+          setTimeout(()=>confetti({particleCount:70,spread:58,origin:{y:0.55,x:0.2},colors:["#f5b400","#fde68a"]}),260);
+          setTimeout(()=>confetti({particleCount:70,spread:58,origin:{y:0.55,x:0.8},colors:["#ff3da6","#a855f7"]}),420);
         },100);
         setNearWin(new Set());
+        return;
       }
     }
     if(next.every(Boolean)) setPhase("result");
@@ -366,7 +367,8 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
 
   function claimAll(){
     sfx("tap"); setRevealed(new Array(6).fill(true));
-    if(winnerSymbol&&!winner){
+    if(winnerSymbol && !awardLock.current){
+      awardLock.current = true;
       const w=grid.find(p=>p.symbol===winnerSymbol)!;
       setWinner(w); addSparks(w.value); sfx("win");
       setWinFlash(true); setTimeout(()=>setWinFlash(false),700);
@@ -376,8 +378,14 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
   }
 
   function reset(){
+    awardLock.current = false;
     setPhase("idle"); setGrid([]); setRevealed([]); setWinner(null);
     setWinnerSym(null); setNearWin(new Set());
+  }
+
+  function handleClose(){
+    reset();
+    onClose();
   }
 
   const idlePH=PRIZES.concat(PRIZES).slice(0,6);
@@ -401,7 +409,6 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
             position:"relative",overflow:"hidden",borderRadius:14,
             background:winner&&p.symbol===winner.symbol?"radial-gradient(circle at 40% 35%,#4c1d9a,#2d0a70)":"radial-gradient(circle at 40% 35%,#1e0a40,#100525)",
             border:winner&&p.symbol===winner.symbol?`2px solid ${p.color}`:"2px solid rgba(130,70,220,0.28)",
-            animation:winner&&p.symbol===winner.symbol?"ls-mglow 1.2s ease-in-out infinite":undefined,
           }}>
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
               <PrizeIcon prize={p} size={28}/>
@@ -419,8 +426,6 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
             position:"relative",overflow:"hidden",borderRadius:14,
             background:"radial-gradient(circle at 40% 35%,#2e1268,#180840)",
             border:"2px solid rgba(130,70,220,0.45)",
-            animation:`ls-breathe 2.5s ease-in-out infinite`,
-            animationDelay:`${i*.15}s`,
           }}>
             <div className="absolute inset-0 flex items-center justify-center opacity-30">
               <PrizeIcon prize={p} size={28}/>
@@ -429,7 +434,6 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
               <div style={{position:"absolute",inset:0,backgroundImage:`url(${lsScratch})`,backgroundSize:"cover",backgroundPosition:"center",display:"flex",alignItems:"center",justifyContent:"center"}}>
                 <span style={{fontSize:"clamp(18px,3svh,26px)",fontWeight:900,color:"rgba(45,60,85,0.65)"}}>?</span>
               </div>
-              <div style={{position:"absolute",top:0,bottom:0,width:"45%",background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.32),transparent)",animation:`ls-shimmer ${2.2+i*.22}s ease-in-out infinite`,animationDelay:`${i*.3}s`}}/>
             </div>
           </div>
         ))}
@@ -444,7 +448,7 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
           {/* Backdrop */}
           <motion.div initial={{opacity:0}} animate={{opacity:1}} exit={{opacity:0}}
             className="fixed inset-0 z-50 bg-black/80 backdrop-blur-sm"
-            onClick={onClose}/>
+            onClick={handleClose}/>
 
           {/* Win flash */}
           <AnimatePresence>
@@ -499,7 +503,7 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
               <Stars/>
 
               {/* Close */}
-              <button onClick={onClose} style={{position:"absolute",top:10,right:10,zIndex:20,width:32,height:32,borderRadius:"50%",background:"rgba(0,0,0,0.5)",border:"1px solid rgba(255,255,255,0.25)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
+              <button onClick={handleClose} style={{position:"absolute",top:10,right:10,zIndex:20,width:32,height:32,borderRadius:"50%",background:"rgba(0,0,0,0.5)",border:"1px solid rgba(255,255,255,0.25)",backdropFilter:"blur(6px)",display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer"}}>
                 <X style={{width:14,height:14,color:"white"}}/>
               </button>
 
@@ -622,9 +626,9 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
 
                 {/* Buttons */}
                 <div style={{flexShrink:0,display:"flex",gap:"clamp(8px,1.5svh,12px)",padding:`0 10px`}}>
-                  {phase==="idle"    && (<><GoldBtn onClick={handlePlay} disabled={authLoading || (!!user && sparks<COST)} flex1>🎰 PLAY</GoldBtn><GoldBtn onClick={onClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
-                  {phase==="playing" && (<><GoldBtn onClick={()=>showToast("Gratta le caselle per rivelare il premio")} flex1>✦ GRATTA ORA</GoldBtn><GoldBtn onClick={onClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
-                  {phase==="result"  && (<><GoldBtn onClick={reset} disabled={authLoading || (!!user && sparks<COST)} flex1>🎰 RIGIOCA</GoldBtn><GoldBtn onClick={onClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
+                  {phase==="idle"    && (<><GoldBtn onClick={handlePlay} disabled={authLoading || (!!user && sparks<COST)} flex1>🎰 PLAY</GoldBtn><GoldBtn onClick={handleClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
+                  {phase==="playing" && (<><GoldBtn onClick={()=>showToast("Gratta le caselle per rivelare il premio")} flex1>✦ GRATTA ORA</GoldBtn><GoldBtn onClick={handleClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
+                  {phase==="result"  && (<><GoldBtn onClick={reset} disabled={authLoading || (!!user && sparks<COST)} flex1>🎰 RIGIOCA</GoldBtn><GoldBtn onClick={handleClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
                 </div>
 
               </div>{/* end content */}
