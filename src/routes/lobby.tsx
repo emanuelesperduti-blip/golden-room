@@ -11,6 +11,7 @@ import { useGameStore } from "@/lib/gameStore";
 import { recentBotWins, BOTS } from "@/lib/bots";
 import { getControlledRoomPopulation, getBotConfigForRoom } from "@/lib/admin";
 import { LuckyStrikeModal } from "@/components/game/LuckyStrikeModal";
+import lsFab from "@/assets/ls-fab.png";
 
 export const Route = createFileRoute("/lobby")({
   head: () => ({
@@ -35,6 +36,7 @@ function LobbyPage() {
   const progressMission = useGameStore((s) => s.progressMission);
   const [now, setNow] = useState(() => Date.now());
   const [luckyOpen, setLuckyOpen] = useState(false);
+  const [fabVisible, setFabVisible] = useState(true);
   const [activity, setActivity] = useState<ActivityItem[]>(() => {
     return ROOMS.slice(0, 3)
       .flatMap((r) =>
@@ -133,40 +135,57 @@ function LobbyPage() {
 
       <div className="h-6" />
 
-      {/* ── Lucky Strike FAB – bottom-left floating button ── */}
-      <motion.button
-        initial={{ scale: 0, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        transition={{ delay: 0.4, type: "spring", stiffness: 300, damping: 22 }}
-        whileTap={{ scale: 0.9 }}
-        whileHover={{ scale: 1.08 }}
-        onClick={() => setLuckyOpen(true)}
-        aria-label="Lucky Strike – Gratta e Vinci"
-        className="fixed bottom-28 left-4 z-40 flex flex-col items-center gap-1"
-      >
-        <div
-          className="relative flex h-16 w-16 items-center justify-center rounded-2xl"
-          style={{
-            background: "linear-gradient(135deg, #4a1c8a 0%, #6d28d9 60%, #7c3aed 100%)",
-            border: "2.5px solid rgba(245,180,0,0.6)",
-            boxShadow: "0 0 20px rgba(138,43,226,0.6), 0 4px 12px rgba(0,0,0,0.5)",
-          }}
-        >
-          {/* Glow pulse ring */}
+      {/* ── Lucky Strike FAB – bottom-left, image icon with dismiss X ── */}
+      <AnimatePresence>
+        {fabVisible && (
           <motion.div
-            className="absolute inset-0 rounded-2xl"
-            animate={{ boxShadow: ["0 0 0px rgba(245,180,0,0)", "0 0 14px rgba(245,180,0,0.6)", "0 0 0px rgba(245,180,0,0)"] }}
-            transition={{ duration: 2, repeat: Infinity, ease: "easeInOut" }}
-          />
-          <span className="text-3xl drop-shadow-lg" role="img" aria-label="gratta e vinci">🎰</span>
-        </div>
-        <span
-          className="rounded-full px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wider text-white"
-          style={{ background: "rgba(138,43,226,0.8)", border: "1px solid rgba(245,180,0,0.4)" }}
-        >
-          Lucky Strike
-        </span>
-      </motion.button>
+            initial={{ scale: 0, opacity: 0, x: -20 }}
+            animate={{ scale: 1, opacity: 1, x: 0 }}
+            exit={{ scale: 0, opacity: 0, x: -20 }}
+            transition={{ type: "spring", stiffness: 300, damping: 22 }}
+            className="fixed bottom-28 left-3 z-40"
+          >
+            {/* Close X button */}
+            <motion.button
+              whileTap={{ scale: 0.85 }}
+              onClick={() => setFabVisible(false)}
+              aria-label="Chiudi"
+              className="absolute -top-2 -right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full text-white"
+              style={{
+                background: "rgba(20,0,40,0.85)",
+                border: "1.5px solid rgba(255,255,255,0.4)",
+                fontSize: 11,
+                fontWeight: 900,
+                lineHeight: 1,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
+              }}
+            >
+              ✕
+            </motion.button>
+
+            {/* Icon button */}
+            <motion.button
+              whileTap={{ scale: 0.92 }}
+              animate={{ y: [0, -6, 0] }}
+              transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+              onClick={() => setLuckyOpen(true)}
+              aria-label="Lucky Strike – Gratta e Vinci"
+              style={{ display: "block", background: "none", border: "none", padding: 0, cursor: "pointer" }}
+            >
+              <img
+                src={lsFab}
+                alt="Lucky Strike Gratta e Vinci"
+                style={{
+                  width: 90,
+                  height: 90,
+                  objectFit: "contain",
+                  filter: "drop-shadow(0 4px 16px rgba(245,180,0,0.55)) drop-shadow(0 2px 6px rgba(0,0,0,0.6))",
+                }}
+              />
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <LuckyStrikeModal open={luckyOpen} onClose={() => setLuckyOpen(false)} />
     </MobileShell>
