@@ -135,53 +135,147 @@ function LobbyPage() {
 
       <div className="h-6" />
 
-      {/* ── Lucky Strike FAB – bottom-left, image icon with dismiss X ── */}
+      {/* ── Lucky Strike FAB – app-style premium button ── */}
       <AnimatePresence>
         {fabVisible && (
           <motion.div
-            initial={{ scale: 0, opacity: 0, x: -20 }}
+            initial={{ scale: 0, opacity: 0, x: -24 }}
             animate={{ scale: 1, opacity: 1, x: 0 }}
-            exit={{ scale: 0, opacity: 0, x: -20 }}
-            transition={{ type: "spring", stiffness: 300, damping: 22 }}
+            exit={{ scale: 0, opacity: 0, x: -24 }}
+            transition={{ type: "spring", stiffness: 340, damping: 21 }}
             className="fixed bottom-28 left-3 z-40"
+            style={{ filter: "drop-shadow(0 18px 28px rgba(0,0,0,0.58))" }}
           >
             {/* Close X button */}
             <motion.button
-              whileTap={{ scale: 0.85 }}
+              whileTap={{ scale: 0.84 }}
               onClick={() => setFabVisible(false)}
-              aria-label="Chiudi"
-              className="absolute -top-2 -right-2 z-10 flex h-6 w-6 items-center justify-center rounded-full text-white"
+              aria-label="Chiudi Lucky Strike"
+              className="absolute -top-2 -right-2 z-20 flex h-7 w-7 items-center justify-center rounded-full text-white"
               style={{
-                background: "rgba(20,0,40,0.85)",
-                border: "1.5px solid rgba(255,255,255,0.4)",
-                fontSize: 11,
-                fontWeight: 900,
+                background: "linear-gradient(180deg, rgba(42,0,72,0.98), rgba(16,0,30,0.95))",
+                border: "1.5px solid rgba(255,255,255,0.55)",
+                fontSize: 12,
+                fontWeight: 950,
                 lineHeight: 1,
-                boxShadow: "0 2px 8px rgba(0,0,0,0.5)",
+                boxShadow: "0 7px 18px rgba(0,0,0,0.65), 0 0 14px rgba(245,180,0,0.35)",
               }}
             >
               ✕
             </motion.button>
 
+            {/* Halo premium */}
+            <div
+              aria-hidden
+              className="absolute inset-0 rounded-full"
+              style={{
+                width: 104,
+                height: 104,
+                left: -7,
+                top: -7,
+                background: "radial-gradient(circle, rgba(255,219,92,0.42) 0%, rgba(236,72,153,0.28) 42%, transparent 70%)",
+                animation: "ls-fab-halo 1.8s ease-in-out infinite",
+                filter: "blur(2px)",
+              }}
+            />
+
             {/* Icon button */}
             <motion.button
-              whileTap={{ scale: 0.92 }}
-              animate={{ y: [0, -6, 0] }}
-              transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }}
+              whileTap={{ scale: 0.9, y: 3 }}
+              whileHover={{ scale: 1.04 }}
+              animate={{ y: [0, -7, 0], rotate: [-1.5, 1.5, -1.5] }}
+              transition={{ duration: 2.5, repeat: Infinity, ease: "easeInOut" }}
               onClick={() => setLuckyOpen(true)}
               aria-label="Lucky Strike – Gratta e Vinci"
-              style={{ display: "block", background: "none", border: "none", padding: 0, cursor: "pointer" }}
+              style={{
+                position: "relative",
+                display: "grid",
+                placeItems: "center",
+                width: 94,
+                height: 94,
+                borderRadius: 28,
+                border: "2px solid rgba(255,236,150,0.78)",
+                padding: 0,
+                cursor: "pointer",
+                overflow: "visible",
+                background: "linear-gradient(145deg, rgba(87,20,155,0.92), rgba(255,63,171,0.70) 48%, rgba(245,180,0,0.78))",
+                boxShadow: [
+                  "0 10px 0 rgba(91,33,12,0.92)",
+                  "0 18px 34px rgba(0,0,0,0.55)",
+                  "0 0 34px rgba(245,180,0,0.72)",
+                  "inset 0 3px 0 rgba(255,255,255,0.35)",
+                  "inset 0 -8px 18px rgba(45,0,80,0.38)",
+                ].join(", "),
+              }}
             >
+              <span
+                aria-hidden
+                style={{
+                  position: "absolute",
+                  top: 7,
+                  left: 15,
+                  right: 15,
+                  height: 18,
+                  borderRadius: 999,
+                  background: "rgba(255,255,255,0.36)",
+                  filter: "blur(3px)",
+                }}
+              />
               <img
                 src={lsFab}
                 alt="Lucky Strike Gratta e Vinci"
                 style={{
-                  width: 90,
-                  height: 90,
+                  position: "relative",
+                  zIndex: 2,
+                  width: 88,
+                  height: 88,
                   objectFit: "contain",
-                  filter: "drop-shadow(0 4px 16px rgba(245,180,0,0.55)) drop-shadow(0 2px 6px rgba(0,0,0,0.6))",
+                  filter: "drop-shadow(0 8px 12px rgba(0,0,0,0.58)) drop-shadow(0 0 18px rgba(255,224,102,0.95))",
                 }}
               />
+              <span
+                style={{
+                  position: "absolute",
+                  left: "50%",
+                  bottom: -11,
+                  transform: "translateX(-50%)",
+                  zIndex: 3,
+                  padding: "3px 10px 4px",
+                  borderRadius: 999,
+                  background: "linear-gradient(180deg,#fde047,#f59e0b)",
+                  border: "1px solid rgba(255,255,255,0.7)",
+                  color: "#431407",
+                  fontSize: 10,
+                  fontWeight: 950,
+                  letterSpacing: "0.06em",
+                  whiteSpace: "nowrap",
+                  boxShadow: "0 5px 12px rgba(0,0,0,0.45), 0 0 16px rgba(245,180,0,0.7)",
+                }}
+              >
+                GRATTA 5 SPARK
+              </span>
+              <span
+                aria-hidden
+                style={{
+                  position: "absolute",
+                  top: -8,
+                  left: -7,
+                  zIndex: 4,
+                  display: "grid",
+                  placeItems: "center",
+                  width: 29,
+                  height: 29,
+                  borderRadius: "50%",
+                  background: "linear-gradient(180deg,#ef4444,#b91c1c)",
+                  border: "2px solid #fff",
+                  color: "white",
+                  fontSize: 16,
+                  fontWeight: 950,
+                  boxShadow: "0 7px 14px rgba(0,0,0,0.45), 0 0 13px rgba(239,68,68,0.8)",
+                }}
+              >
+                !
+              </span>
             </motion.button>
           </motion.div>
         )}

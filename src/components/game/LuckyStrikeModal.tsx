@@ -1,8 +1,11 @@
 import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "@tanstack/react-router";
 import { X } from "lucide-react";
 import { useEffect, useRef, useCallback, useState } from "react";
 import confetti from "canvas-confetti";
 import { useGameStore } from "@/lib/gameStore";
+import { useAuth } from "@/hooks/useAuth";
+import { setAuthRedirect } from "@/lib/authRedirect";
 import { useAudio } from "@/hooks/useAudio";
 import sparkIcon from "@/assets/icon-spark.png";
 import lsBg      from "@/assets/ls-bg.png";
@@ -28,6 +31,7 @@ function injectStyles() {
     @keyframes ls-near   { 0%,100%{transform:scale(1)} 25%{transform:scale(1.07) rotate(-1deg)} 75%{transform:scale(1.07) rotate(1deg)} }
     @keyframes ls-ticker { 0%{transform:translateX(0)} 100%{transform:translateX(-50%)} }
     @keyframes ls-spulse { 0%,100%{opacity:0.2;transform:scale(0.75)} 50%{opacity:0.85;transform:scale(1.3)} }
+    @keyframes ls-fab-halo { 0%,100%{transform:scale(0.92);opacity:.45} 50%{transform:scale(1.13);opacity:.95} }
   `;
   document.head.appendChild(s);
 }
@@ -142,6 +146,7 @@ function ScratchCell({ prize,revealed,onReveal,disabled,isWinner,isNearWin,onScr
   const drawing=useRef(false);
   const revealedOnce=useRef(false);
   const strokeCount=useRef(0);
+  const lastPoint=useRef<{x:number;y:number}|null>(null);
 
   const paintCover=useCallback(()=>{
     const canvas=canvasRef.current; if(!canvas)return;
@@ -183,44 +188,68 @@ function ScratchCell({ prize,revealed,onReveal,disabled,isWinner,isNearWin,onScr
     }
   },[revealed,paintCover]);
 
+  const getPoint=(clientX:number,clientY:number)=>{
+    const canvas=canvasRef.current; if(!canvas)return null;
+    const rect=canvas.getBoundingClientRect();
+    const x=((clientX-rect.left)/rect.width)*canvas.width;
+    const y=((clientY-rect.top)/rect.height)*canvas.height;
+    if(x<0||y<0||x>canvas.width||y>canvas.height)return null;
+    return {x,y};
+  };
+
+  const checkReveal=useCallback(()=>{
+    if(revealedOnce.current)return;
+    const canvas=canvasRef.current; if(!canvas)return;
+    const ctx=canvas.getContext("2d", { willReadFrequently:true }); if(!ctx)return;
+    const data=ctx.getImageData(0,0,canvas.width,canvas.height).data;
+    let cleared=0;
+    // Campionamento leggero: molto più fluido su mobile rispetto al controllo di ogni pixel.
+    for(let i=3;i<data.length;i+=16) if(data[i]<90) cleared++;
+    const sampledPixels=data.length/16;
+    const ratio=cleared/sampledPixels;
+
+    // Rivela solo questa casella, una volta sola. Soglia più bassa = grattata più piacevole.
+    if(ratio>0.34){
+      revealedOnce.current=true;
+      drawing.current=false;
+      lastPoint.current=null;
+      onReveal();
+    }
+  },[onReveal]);
+
   const scratchAt=useCallback((clientX:number,clientY:number)=>{
     if(disabled||revealed||revealedOnce.current)return;
     const canvas=canvasRef.current; if(!canvas)return;
     const ctx=canvas.getContext("2d", { willReadFrequently:true }); if(!ctx)return;
-    const rect=canvas.getBoundingClientRect();
-    const x=((clientX-rect.left)/rect.width)*canvas.width;
-    const y=((clientY-rect.top)/rect.height)*canvas.height;
-    if(x<0||y<0||x>canvas.width||y>canvas.height)return;
+    const point=getPoint(clientX,clientY); if(!point)return;
 
+    const prev=lastPoint.current ?? point;
     ctx.save();
     ctx.globalCompositeOperation="destination-out";
+    ctx.lineCap="round";
+    ctx.lineJoin="round";
+    ctx.lineWidth=34;
     ctx.beginPath();
-    ctx.arc(x,y,22,0,Math.PI*2);
+    ctx.moveTo(prev.x,prev.y);
+    ctx.lineTo(point.x,point.y);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.arc(point.x,point.y,18,0,Math.PI*2);
     ctx.fill();
     ctx.restore();
+
+    lastPoint.current=point;
     onScratchSfx();
 
     strokeCount.current += 1;
-    if(strokeCount.current % 6 !== 0) return;
-
-    const data=ctx.getImageData(0,0,canvas.width,canvas.height).data;
-    let cleared=0;
-    for(let i=3;i<data.length;i+=4) if(data[i]<80) cleared++;
-    const ratio=cleared/(canvas.width*canvas.height);
-
-    // SICUREZZA: questa cella può rivelare solo se stessa, una sola volta.
-    // Niente reveal globale automatico mentre l'utente gratta.
-    if(ratio>0.46){
-      revealedOnce.current=true;
-      drawing.current=false;
-      onReveal();
-    }
-  },[disabled,revealed,onReveal,onScratchSfx]);
+    if(strokeCount.current % 10 === 0) checkReveal();
+  },[disabled,revealed,onScratchSfx,checkReveal]);
 
   const startDraw=(e:React.PointerEvent<HTMLCanvasElement>)=>{
     if(disabled||revealed||revealedOnce.current)return;
     e.preventDefault(); e.stopPropagation();
     drawing.current=true;
+    lastPoint.current=getPoint(e.clientX,e.clientY);
     e.currentTarget.setPointerCapture?.(e.pointerId);
     scratchAt(e.clientX,e.clientY);
   };
@@ -232,7 +261,9 @@ function ScratchCell({ prize,revealed,onReveal,disabled,isWinner,isNearWin,onScr
   const endDraw=(e:React.PointerEvent<HTMLCanvasElement>)=>{
     e.preventDefault(); e.stopPropagation();
     drawing.current=false;
-    e.currentTarget.releasePointerCapture?.(e.pointerId);
+    lastPoint.current=null;
+    checkReveal();
+    try { e.currentTarget.releasePointerCapture?.(e.pointerId); } catch {}
   };
 
   return (
@@ -240,7 +271,8 @@ function ScratchCell({ prize,revealed,onReveal,disabled,isWinner,isNearWin,onScr
       position:"relative", overflow:"hidden", borderRadius:14,
       background: isWinner&&revealed ? "radial-gradient(circle at 40% 35%,#4c1d9a,#2d0a70)" : "radial-gradient(circle at 40% 35%,#2e1268,#180840)",
       border: isWinner&&revealed ? `2px solid ${prize.color}` : "2px solid rgba(130,70,220,0.45)",
-      animation: isWinner&&revealed ? "ls-mglow 1.2s ease-in-out infinite" : isNearWin ? "ls-near 0.6s ease-in-out infinite" : "ls-breathe 2.5s ease-in-out infinite",
+      // Durante la grattata la casella resta ferma: niente wobble/scale che disturbano il dito.
+      animation: isWinner&&revealed ? "ls-mglow 1.2s ease-in-out infinite" : isNearWin ? "ls-near 0.6s ease-in-out infinite" : undefined,
     }}>
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5"
         style={revealed?{animation:"ls-pop 0.5s ease-out both"}:{}}>
@@ -254,7 +286,7 @@ function ScratchCell({ prize,revealed,onReveal,disabled,isWinner,isNearWin,onScr
       )}
       <canvas ref={canvasRef} width={120} height={120}
         className="absolute inset-0 h-full w-full touch-none"
-        style={{borderRadius:12,cursor:disabled||revealed?"default":"crosshair",display:revealed?"none":"block",touchAction:"none"}}
+        style={{borderRadius:12,cursor:disabled||revealed?"default":"crosshair",display:revealed?"none":"block",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none"}}
         onPointerDown={startDraw}
         onPointerMove={moveDraw}
         onPointerUp={endDraw}
@@ -268,6 +300,8 @@ function ScratchCell({ prize,revealed,onReveal,disabled,isWinner,isNearWin,onScr
 // ── Main ──────────────────────────────────────────────────────────────────────
 export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>void }) {
   const { sfx } = useAudio();
+  const navigate = useNavigate();
+  const { user, loading: authLoading } = useAuth();
   const sparks      = useGameStore(s=>s.sparks);
   const spendSparks = useGameStore(s=>s.spendSparks);
   const addSparks   = useGameStore(s=>s.addSparks);
@@ -292,6 +326,14 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
 
   function handlePlay(){
     sfx("tap");
+    if(authLoading){ showToast("Controllo accesso in corso..."); return; }
+    if(!user){
+      sfx("error");
+      showToast("Accedi per comprare un gratta e vinci");
+      if(typeof window !== "undefined") setAuthRedirect(`${window.location.pathname}${window.location.search}`);
+      setTimeout(()=>{ void navigate({ to: "/auth" }); }, 450);
+      return;
+    }
     if(sparks<COST){ sfx("error"); showToast(`Servono ${COST} Spark!`); return; }
     spendSparks(COST); sfx("purchase");
     const {prizes,winnerSymbol:ws}=buildGrid(0.22);
@@ -584,9 +626,9 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
 
                 {/* Buttons */}
                 <div style={{flexShrink:0,display:"flex",gap:"clamp(8px,1.5svh,12px)",padding:`0 10px`}}>
-                  {phase==="idle"    && (<><GoldBtn onClick={handlePlay} disabled={sparks<COST} flex1>🎰 PLAY</GoldBtn><GoldBtn onClick={onClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
+                  {phase==="idle"    && (<><GoldBtn onClick={handlePlay} disabled={authLoading || (!!user && sparks<COST)} flex1>🎰 PLAY</GoldBtn><GoldBtn onClick={onClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
                   {phase==="playing" && (<><GoldBtn onClick={onClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
-                  {phase==="result"  && (<><GoldBtn onClick={reset} disabled={sparks<COST} flex1>🎰 RIGIOCA</GoldBtn><GoldBtn onClick={onClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
+                  {phase==="result"  && (<><GoldBtn onClick={reset} disabled={authLoading || (!!user && sparks<COST)} flex1>🎰 RIGIOCA</GoldBtn><GoldBtn onClick={onClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
                 </div>
 
               </div>{/* end content */}
