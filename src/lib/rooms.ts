@@ -191,6 +191,8 @@ export function getRoom(id: string | undefined): RoomConfig {
           playingSec: overrides.gameDuration ?? baseRoom.playingSec,
           ticketCost: overrides.ticketCost ?? baseRoom.ticketCost,
           sparkReward: overrides.sparkReward ?? baseRoom.sparkReward,
+          ticketReward: overrides.ticketReward ?? baseRoom.ticketReward,
+          drawIntervalMs: overrides.drawSpeed ?? baseRoom.drawIntervalMs,
           // Recalculate cycleSec if timings changed
           cycleSec: (overrides.countdownDuration ?? baseRoom.waitingSec) + 
                     (overrides.gameDuration ?? baseRoom.playingSec) + 
@@ -354,6 +356,17 @@ export function drawOrderForCurrentRound(room: RoomConfig, now = Date.now()): nu
 
 /** Commercial-friendly cap so a player can buy multiple cards without breaking mobile UX. */
 export function maxCardsPerRoom(room: RoomConfig): number {
+  // Check for admin override
+  if (typeof window !== "undefined") {
+    try {
+      const adminData = JSON.parse(window.localStorage.getItem("golden-room-admin-v1") || "{}");
+      const overrides = adminData.state?.roomConfigs?.[room.id];
+      if (overrides?.maxCardsPerUser) {
+        return overrides.maxCardsPerUser;
+      }
+    } catch (e) {}
+  }
+
   switch (room.tier) {
     case "vip":
     case "jackpot":

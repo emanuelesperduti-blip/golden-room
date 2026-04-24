@@ -5,10 +5,11 @@ import { useEffect, useMemo, useState } from "react";
 import { MobileShell } from "@/components/game/MobileShell";
 import { Badge } from "@/components/game/Badge";
 import sparkIcon from "@/assets/icon-spark.png";
-import { ROOMS, getRoomTimeline, getRoomPopulation, type RoomConfig } from "@/lib/rooms";
+import { ROOMS, getRoomTimeline, type RoomConfig } from "@/lib/rooms";
 import { useAudio } from "@/hooks/useAudio";
 import { useGameStore } from "@/lib/gameStore";
 import { recentBotWins, BOTS } from "@/lib/bots";
+import { getControlledRoomPopulation, getBotConfigForRoom } from "@/lib/admin";
 
 export const Route = createFileRoute("/lobby")({
   head: () => ({
@@ -50,7 +51,10 @@ function LobbyPage() {
     const clock = setInterval(() => setNow(Date.now()), 1000);
 
     function pushActivity() {
-      const room = ROOMS[Math.floor(Math.random() * ROOMS.length)];
+      // Only show bot activity if the chosen room has bots enabled
+      const enabledRooms = ROOMS.filter((r) => getBotConfigForRoom(r.id).enabled && getBotConfigForRoom(r.id).botCount > 0);
+      const targetRooms = enabledRooms.length > 0 ? enabledRooms : ROOMS;
+      const room = targetRooms[Math.floor(Math.random() * targetRooms.length)];
       const wins = recentBotWins(room.name);
       const text = wins[Math.floor(Math.random() * wins.length)];
       const avatar = BOTS[Math.floor(Math.random() * BOTS.length)].avatar;
@@ -134,13 +138,13 @@ function RoomCard({ room, delay, index }: { room: RoomConfig; delay: number; ind
   const { sfx } = useAudio();
   const progressMission = useGameStore((s) => s.progressMission);
   const [now, setNow] = useState(() => Date.now());
-  const [players, setPlayers] = useState(() => getRoomPopulation(room).total);
+  const [players, setPlayers] = useState(() => getControlledRoomPopulation(room).total);
   const [recentWin, setRecentWin] = useState(() => recentBotWins(room.name)[0]);
 
   useEffect(() => {
     const timer = setInterval(() => {
       setNow(Date.now());
-      setPlayers(getRoomPopulation(room).total);
+      setPlayers(getControlledRoomPopulation(room).total);
     }, 1000);
 
     const winTimer = setInterval(() => {

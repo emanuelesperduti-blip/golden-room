@@ -62,8 +62,13 @@ function AdminPage() {
   const { user } = useAuth();
   const { sparks, tickets, bingosWon } = useViewerGameState();
   const allowed = isAdminUser(user);
-  const now = Date.now();
+  const [now, setNow] = useState(() => Date.now());
   const [botConfig, setBotConfig] = useState<BotRoomConfigMap>(() => readBotConfig());
+
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 5000);
+    return () => clearInterval(t);
+  }, []);
   const [activeTab, setActiveTab] = useState<"dashboard" | "currencies" | "rooms" | "users" | "leaderboard" | "notifications" | "maintenance" | "events" | "logs">("dashboard");
 
   // Admin store
@@ -147,7 +152,7 @@ function AdminPage() {
 
   if (!allowed) {
     return (
-      <MobileShell title="Admin Panel">
+      <MobileShell>
         <div className="px-4 pb-24 pt-5">
           <div className="rounded-3xl border border-red-400/25 bg-[linear-gradient(180deg,rgba(70,0,20,0.65),rgba(15,5,20,0.92))] p-5 text-center shadow-card-game">
             <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-500/15 text-red-200">
@@ -166,7 +171,7 @@ function AdminPage() {
   }
 
   return (
-    <MobileShell title="Admin Panel">
+    <MobileShell>
       <div className="px-4 pb-24 pt-5">
         {/* Header */}
         <motion.section
@@ -595,85 +600,171 @@ function RoomsTab({
 }) {
   return (
     <section className="mt-4 space-y-4">
-      {roomsState.map(({ room }) => (
-        <div key={room.id} className="rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
-          <p className="text-sm font-black text-white mb-3">{room.name}</p>
+      {roomsState.map(({ room }) => {
+        const bc = botConfig[room.id] ?? { enabled: true, botCount: 5, chatPace: "media", reactionSpeed: "normale" };
+        return (
+          <div key={room.id} className="rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-sm font-black text-white">{room.name}</p>
+              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.14em] ${bc.enabled ? "border-emerald-300/40 bg-emerald-400/15 text-emerald-200" : "border-red-300/30 bg-red-400/10 text-red-200"}`}>
+                Bot {bc.enabled ? "ON" : "OFF"}
+              </span>
+            </div>
 
-          <div className="grid grid-cols-1 gap-3">
-            <label className="block">
-              <p className="text-xs font-bold text-white/60 mb-2">Durata countdown (secondi)</p>
-              <input
-                type="number"
-                defaultValue={room.waitingSec}
-                onChange={(e) => {
-                  setRoomConfig(room.id, { countdownDuration: Number(e.target.value) });
-                  addActivityLog({
-                    type: "admin_action",
-                    roomId: room.id,
-                    details: { action: "update_room_countdown", value: Number(e.target.value) },
-                    severity: "info",
-                  });
-                }}
-                className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
-              />
-            </label>
+            {/* ── Configurazione Room ── */}
+            <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-white/40 mb-2">Parametri room</p>
+            <div className="grid grid-cols-1 gap-3 mb-5">
+              <label className="block">
+                <p className="text-xs font-bold text-white/60 mb-2">Durata countdown (secondi)</p>
+                <input
+                  type="number"
+                  defaultValue={room.waitingSec}
+                  onChange={(e) => {
+                    setRoomConfig(room.id, { countdownDuration: Number(e.target.value) });
+                    addActivityLog({ type: "admin_action", roomId: room.id, details: { action: "update_room_countdown", value: Number(e.target.value) }, severity: "info" });
+                  }}
+                  className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+                />
+              </label>
 
-            <label className="block">
-              <p className="text-xs font-bold text-white/60 mb-2">Durata partita (secondi)</p>
-              <input
-                type="number"
-                defaultValue={room.playingSec}
-                onChange={(e) => {
-                  setRoomConfig(room.id, { gameDuration: Number(e.target.value) });
-                  addActivityLog({
-                    type: "admin_action",
-                    roomId: room.id,
-                    details: { action: "update_room_duration", value: Number(e.target.value) },
-                    severity: "info",
-                  });
-                }}
-                className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
-              />
-            </label>
+              <label className="block">
+                <p className="text-xs font-bold text-white/60 mb-2">Durata partita (secondi)</p>
+                <input
+                  type="number"
+                  defaultValue={room.playingSec}
+                  onChange={(e) => {
+                    setRoomConfig(room.id, { gameDuration: Number(e.target.value) });
+                    addActivityLog({ type: "admin_action", roomId: room.id, details: { action: "update_room_duration", value: Number(e.target.value) }, severity: "info" });
+                  }}
+                  className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+                />
+              </label>
 
-            <label className="block">
-              <p className="text-xs font-bold text-white/60 mb-2">Costo cartella (ticket)</p>
-              <input
-                type="number"
-                defaultValue={room.ticketCost}
-                onChange={(e) => {
-                  setRoomConfig(room.id, { ticketCost: Number(e.target.value) });
-                  addActivityLog({
-                    type: "admin_action",
-                    roomId: room.id,
-                    details: { action: "update_ticket_cost", value: Number(e.target.value) },
-                    severity: "info",
-                  });
-                }}
-                className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
-              />
-            </label>
+              <label className="block">
+                <p className="text-xs font-bold text-white/60 mb-2">Costo cartella (ticket)</p>
+                <input
+                  type="number"
+                  defaultValue={room.ticketCost}
+                  onChange={(e) => {
+                    setRoomConfig(room.id, { ticketCost: Number(e.target.value) });
+                    addActivityLog({ type: "admin_action", roomId: room.id, details: { action: "update_ticket_cost", value: Number(e.target.value) }, severity: "info" });
+                  }}
+                  className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+                />
+              </label>
 
-            <label className="block">
-              <p className="text-xs font-bold text-white/60 mb-2">Premio Spark</p>
-              <input
-                type="number"
-                defaultValue={room.sparkReward}
-                onChange={(e) => {
-                  setRoomConfig(room.id, { sparkReward: Number(e.target.value) });
-                  addActivityLog({
-                    type: "admin_action",
-                    roomId: room.id,
-                    details: { action: "update_spark_reward", value: Number(e.target.value) },
-                    severity: "info",
-                  });
-                }}
-                className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
-              />
-            </label>
+              <label className="block">
+                <p className="text-xs font-bold text-white/60 mb-2">Premio Spark</p>
+                <input
+                  type="number"
+                  defaultValue={room.sparkReward}
+                  onChange={(e) => {
+                    setRoomConfig(room.id, { sparkReward: Number(e.target.value) });
+                    addActivityLog({ type: "admin_action", roomId: room.id, details: { action: "update_spark_reward", value: Number(e.target.value) }, severity: "info" });
+                  }}
+                  className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
+                />
+              </label>
+            </div>
+
+            {/* ── Configurazione Bot ── */}
+            <div className="rounded-2xl border border-white/8 bg-black/20 p-3 space-y-3">
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-white/40">Configurazione bot</p>
+
+              {/* Enabled toggle */}
+              <div className="flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-bold text-white">Bot attivi</p>
+                  <p className="text-[11px] font-bold text-white/50">Abilita/disabilita bot per questa room</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    updateRoomConfig(room.id, { enabled: !bc.enabled });
+                    addActivityLog({ type: "admin_action", roomId: room.id, details: { action: "toggle_bots", enabled: !bc.enabled }, severity: "info" });
+                  }}
+                  className={`relative h-7 w-12 rounded-full border transition-all ${bc.enabled ? "border-emerald-400/60 bg-emerald-500/30" : "border-white/15 bg-white/10"}`}
+                >
+                  <span className={`absolute top-0.5 h-6 w-6 rounded-full transition-all shadow ${bc.enabled ? "left-5 bg-emerald-400" : "left-0.5 bg-white/40"}`} />
+                </button>
+              </div>
+
+              {/* Bot count */}
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-xs font-bold text-white">Numero bot</p>
+                  <span className="rounded-full border border-white/15 bg-black/20 px-2 py-0.5 text-xs font-extrabold text-gold">{bc.botCount}</span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={50}
+                  value={bc.botCount}
+                  disabled={!bc.enabled}
+                  onChange={(e) => {
+                    updateRoomConfig(room.id, { botCount: Number(e.target.value) });
+                    addActivityLog({ type: "admin_action", roomId: room.id, details: { action: "update_bot_count", value: Number(e.target.value) }, severity: "info" });
+                  }}
+                  className="w-full accent-yellow-400 disabled:opacity-40"
+                />
+                <div className="flex justify-between text-[10px] font-bold text-white/35 mt-1">
+                  <span>0</span><span>25</span><span>50</span>
+                </div>
+              </div>
+
+              {/* Chat pace */}
+              <div>
+                <p className="text-xs font-bold text-white mb-2">Frequenza chat bot</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(["bassa", "media", "alta"] as const).map((pace) => (
+                    <button
+                      key={pace}
+                      type="button"
+                      disabled={!bc.enabled}
+                      onClick={() => {
+                        updateRoomConfig(room.id, { chatPace: pace });
+                        addActivityLog({ type: "admin_action", roomId: room.id, details: { action: "update_chat_pace", value: pace }, severity: "info" });
+                      }}
+                      className={`rounded-xl border py-1.5 text-[11px] font-extrabold uppercase tracking-[0.1em] transition-all disabled:opacity-40 ${bc.chatPace === pace ? "border-gold/50 bg-gold/20 text-gold" : "border-white/10 bg-white/5 text-white/55"}`}
+                    >
+                      {pace}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Reaction speed */}
+              <div>
+                <p className="text-xs font-bold text-white mb-2">Velocità reazione bot</p>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {(["lenta", "normale", "rapida"] as const).map((speed) => (
+                    <button
+                      key={speed}
+                      type="button"
+                      disabled={!bc.enabled}
+                      onClick={() => {
+                        updateRoomConfig(room.id, { reactionSpeed: speed });
+                        addActivityLog({ type: "admin_action", roomId: room.id, details: { action: "update_reaction_speed", value: speed }, severity: "info" });
+                      }}
+                      className={`rounded-xl border py-1.5 text-[11px] font-extrabold uppercase tracking-[0.1em] transition-all disabled:opacity-40 ${bc.reactionSpeed === speed ? "border-cyan-300/50 bg-cyan-400/15 text-cyan-100" : "border-white/10 bg-white/5 text-white/55"}`}
+                    >
+                      {speed}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Live preview */}
+              <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
+                <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-white/40 mb-1">Stato effettivo in lobby</p>
+                <p className="text-xs font-bold text-white">
+                  {bc.enabled ? `${bc.botCount} bot attivi` : "Nessun bot"} · chat {bc.chatPace} · reazione {bc.reactionSpeed}
+                </p>
+              </div>
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </section>
   );
 }

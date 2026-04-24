@@ -139,15 +139,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
 
       setSupabaseEnabled(true);
-      sb.auth.getSession().then(({ data }: any) => {
-        if (cancelled) return;
-        setSession(data.session ?? null);
+      try {
+        sb.auth.getSession().then(({ data }: any) => {
+          if (cancelled) return;
+          setSession(data.session ?? null);
+          setLoading(false);
+        }).catch((e: any) => {
+          console.error("Auth session error:", e);
+          setLoading(false);
+        });
+        
+        const { data: listener } = sb.auth.onAuthStateChange((_: any, s: Session | null) => {
+          setSession(s);
+        });
+        unsub = () => listener?.subscription?.unsubscribe();
+      } catch (e) {
+        console.error("Auth bootstrap error:", e);
         setLoading(false);
-      });
-      const { data: listener } = sb.auth.onAuthStateChange((_: any, s: Session | null) => {
-        setSession(s);
-      });
-      unsub = () => listener?.subscription?.unsubscribe();
+      }
+    }).catch((e) => {
+      console.error("Supabase init error:", e);
+      setLoading(false);
     });
 
     return () => {
@@ -157,32 +169,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function signInWithGoogle() {
-    const sb = await getSupabase();
-    if (!sb) return { error: "Accesso Google disponibile quando colleghi Supabase." };
-    const { error } = await sb.auth.signInWithOAuth({
-      provider: "google",
-      options: { redirectTo: `${window.location.origin}/` },
-    });
-    return { error: error?.message };
+    try {
+      const sb = await getSupabase();
+      if (!sb) return { error: "Accesso Google disponibile quando colleghi Supabase." };
+      const { error } = await sb.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo: `${window.location.origin}/` },
+      });
+      return { error: error?.message };
+    } catch (e: any) {
+      return { error: e.message || "Errore durante l'accesso con Google." };
+    }
   }
 
   async function signInWithFacebook() {
-    const sb = await getSupabase();
-    if (!sb) return { error: "Accesso Facebook disponibile quando colleghi Supabase." };
-    const { error } = await sb.auth.signInWithOAuth({
-      provider: "facebook",
-      options: { redirectTo: `${window.location.origin}/` },
-    });
-    return { error: error?.message };
+    try {
+      const sb = await getSupabase();
+      if (!sb) return { error: "Accesso Facebook disponibile quando colleghi Supabase." };
+      const { error } = await sb.auth.signInWithOAuth({
+        provider: "facebook",
+        options: { redirectTo: `${window.location.origin}/` },
+      });
+      return { error: error?.message };
+    } catch (e: any) {
+      return { error: e.message || "Errore durante l'accesso con Facebook." };
+    }
   }
 
   async function signInWithEmail(email: string, password: string) {
     const normalizedEmail = email.trim().toLowerCase();
     const normalizedPassword = password.trim();
-    const sb = await getSupabase();
-    if (sb) {
-      const { error } = await sb.auth.signInWithPassword({ email: normalizedEmail, password: normalizedPassword });
-      return { error: error?.message };
+    try {
+      const sb = await getSupabase();
+      if (sb) {
+        const { error } = await sb.auth.signInWithPassword({ email: normalizedEmail, password: normalizedPassword });
+        return { error: error?.message };
+      }
+    } catch (e: any) {
+      return { error: e.message || "Errore durante l'accesso." };
     }
 
     const account = readLocalAccounts().find((entry) => entry.email.toLowerCase() === normalizedEmail);
@@ -200,14 +224,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const normalizedEmail = email.trim().toLowerCase();
     const normalizedPassword = password.trim();
     const normalizedName = name.trim();
-    const sb = await getSupabase();
-    if (sb) {
-      const { error } = await sb.auth.signUp({
-        email: normalizedEmail,
-        password: normalizedPassword,
-        options: { data: { full_name: normalizedName } },
-      });
-      return { error: error?.message };
+    try {
+      const sb = await getSupabase();
+      if (sb) {
+        const { error } = await sb.auth.signUp({
+          email: normalizedEmail,
+          password: normalizedPassword,
+          options: { data: { full_name: normalizedName } },
+        });
+        return { error: error?.message };
+      }
+    } catch (e: any) {
+      return { error: e.message || "Errore durante la registrazione." };
     }
 
     if (!normalizedName) return { error: "Inserisci un nome valido." };
@@ -235,11 +263,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
-    const sb = await getSupabase();
-    if (sb) {
-      await sb.auth.signOut();
-      setSession(null);
-      return;
+    try {
+      const sb = await getSupabase();
+      if (sb) {
+        await sb.auth.signOut();
+        setSession(null);
+        return;
+      }
+    } catch (e) {
+      console.error("Sign out error:", e);
     }
     writeLocalSession(null);
     setLocalUser(null);

@@ -133,6 +133,7 @@ export const useGameStore = create<GameState>()(
       spendSparks: (n) => {
         if (get().sparks < n) return false;
         set((s) => ({ sparks: s.sparks - n }));
+        get().progressMission("spend_sparks_50", n);
         return true;
       },
       addTickets: (n) => set((s) => ({ tickets: Math.max(0, s.tickets + n) })),
@@ -188,6 +189,10 @@ export const useGameStore = create<GameState>()(
 
       usePremiumReveal: () => {
         const s = get();
+        if (s.vip) {
+          // VIP users get free premium reveals, no cost
+          return true;
+        }
         if (s.premiumRevealsLeft > 0) {
           set((st) => ({ premiumRevealsLeft: Math.max(0, st.premiumRevealsLeft - 1) }));
           return true;
@@ -208,8 +213,8 @@ export const useGameStore = create<GameState>()(
         set((st) => ({
           lastEarlyBirdDate: t,
           earlyBirdClaimed: true,
-          sparks: st.sparks + 12,
-          coins: st.coins + 150,
+          sparks: st.sparks + 50,
+          coins: st.coins + 200,
           premiumRevealsLeft: st.premiumRevealsLeft + 1,
         }));
         return { ok: true };

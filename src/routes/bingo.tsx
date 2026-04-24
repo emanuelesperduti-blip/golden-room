@@ -19,7 +19,7 @@ import {
 import { z } from "zod";
 import { MobileShell } from "@/components/game/MobileShell";
 import bingoBall from "@/assets/bingo-ball-empty.png";
-import { cardForRound, drawOrderForRound, getRoom, getRoomPopulation, getRoomTimeline, maxCardsPerRoom, maxDrawsForRoom } from "@/lib/rooms";
+import { cardForRound, drawOrderForRound, getRoom, getRoomTimeline, maxCardsPerRoom, maxDrawsForRoom } from "@/lib/rooms";
 import { useGameStore } from "@/lib/gameStore";
 import { useAudio } from "@/hooks/useAudio";
 import { setAuthRedirect } from "@/lib/authRedirect";
@@ -295,7 +295,6 @@ function BingoPage() {
   const isGuest = !user;
   const storageKey = useMemo(() => getBingoStorageKey(room.id, user?.id ?? null), [room.id, user?.id]);
   const botConfig = useMemo(() => getBotConfigForRoom(room.id), [room.id]);
-  const roomPopulation = useMemo(() => getRoomPopulation(room, now), [room, now]);
   const botCount = botConfig.enabled ? botConfig.botCount : 0;
 
   const drawOrder = useMemo(() => drawOrderForRound(room, currentRoundIndex), [room, currentRoundIndex]);
@@ -633,7 +632,12 @@ function BingoPage() {
         const adminData = JSON.parse(window.localStorage.getItem("golden-room-admin-v1") || "{}");
         const multipliers = adminData.state?.eventMultipliers || [];
         const now = Date.now();
-        const activeEvents = multipliers.filter((e: any) => e.isActive && e.startTime <= now && now < e.endTime);
+        const activeEvents = multipliers.filter((e: any) => 
+          e.isActive && 
+          e.startTime <= now && 
+          now < e.endTime &&
+          (!e.targetRoomId || e.targetRoomId === room.id)
+        );
         
         for (const event of activeEvents) {
           sparkReward *= event.sparkMultiplier;
@@ -733,7 +737,13 @@ function BingoPage() {
       const adminData = JSON.parse(window.localStorage.getItem("golden-room-admin-v1") || "{}");
       const multipliers = adminData.state?.eventMultipliers || [];
       const now = Date.now();
-      isFreeRoom = isFreeRoom || multipliers.some((e: any) => e.isActive && e.freeRoomEnabled && e.startTime <= now && now < e.endTime);
+      isFreeRoom = isFreeRoom || multipliers.some((e: any) => 
+        e.isActive && 
+        e.freeRoomEnabled && 
+        e.startTime <= now && 
+        now < e.endTime &&
+        (!e.targetRoomId || e.targetRoomId === room.id)
+      );
     } catch (e) {}
 
     const qty = isFreeRoom ? Math.min(purchaseQty, availableSlots) : Math.min(purchaseQty, affordableSlots);

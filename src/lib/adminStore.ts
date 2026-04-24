@@ -245,7 +245,8 @@ export const useAdminStore = create<AdminState>()(
             },
           },
         })),
-      assignCreditsToUser: (userId, sparks, tickets, coins) =>
+      assignCreditsToUser: (userId, sparks, tickets, coins) => {
+        // Update admin store
         set((state) => {
           const user = state.users[userId];
           if (!user) return state;
@@ -260,8 +261,27 @@ export const useAdminStore = create<AdminState>()(
               },
             },
           };
-        }),
-      assignCreditsToAll: (sparks, tickets, coins) =>
+        });
+        
+        // Real-time connection to gameStore if this is the current user
+        // We use a dynamic import or access the store directly to avoid circular deps
+        try {
+          const { useGameStore } = require("./gameStore");
+          const { useAuth } = require("../hooks/useAuth");
+          const currentUser = useAuth.getState?.()?.user || (window as any).__GAMESPARK_USER__;
+          
+          if (currentUser?.id === userId) {
+            const gameStore = useGameStore.getState();
+            if (sparks !== 0) gameStore.addSparks(sparks);
+            if (tickets !== 0) gameStore.addTickets(tickets);
+            if (coins !== 0) gameStore.addCoins(coins);
+          }
+        } catch (e) {
+          console.error("Failed to sync credits to gameStore:", e);
+        }
+      },
+      assignCreditsToAll: (sparks, tickets, coins) => {
+        // Update admin store
         set((state) => {
           const updated = { ...state.users };
           for (const userId in updated) {
@@ -273,7 +293,19 @@ export const useAdminStore = create<AdminState>()(
             };
           }
           return { users: updated };
-        }),
+        });
+
+        // Real-time connection to gameStore for current user
+        try {
+          const { useGameStore } = require("./gameStore");
+          const gameStore = useGameStore.getState();
+          if (sparks !== 0) gameStore.addSparks(sparks);
+          if (tickets !== 0) gameStore.addTickets(tickets);
+          if (coins !== 0) gameStore.addCoins(coins);
+        } catch (e) {
+          console.error("Failed to sync credits to gameStore:", e);
+        }
+      },
       resetUserProfile: (userId) =>
         set((state) => {
           const user = state.users[userId];

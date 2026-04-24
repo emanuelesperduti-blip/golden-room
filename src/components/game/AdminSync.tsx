@@ -32,6 +32,12 @@ export function AdminSync() {
       isBanned: false,
     };
 
+    // Check if user already exists in admin store to preserve isBanned status
+    const existingUser = useAdminStore.getState().users[user.id];
+    if (existingUser) {
+      profile.isBanned = existingUser.isBanned;
+    }
+
     addUser(profile);
 
     return () => {
@@ -46,22 +52,23 @@ export function AdminSync() {
     // Track wins
     if (gameState.bingosWon > lastWins.current) {
       const diff = gameState.bingosWon - lastWins.current;
+      // Compute spark reward from the delta (sparks gained since last check)
+      const sparkDelta = Math.max(0, gameState.sparks - lastSparks.current);
       addActivityLog({
         type: "win",
         userId: user.id,
         username: gameState.username,
-        details: { count: diff },
+        details: { count: diff, sparksWon: sparkDelta },
         severity: "info",
       });
-      
-      // Add to win records (simplified)
+
       addWinRecord({
         id: `win-${Date.now()}`,
         userId: user.id,
         username: gameState.username,
         roomId: "unknown",
         roomName: "Partita Bingo",
-        sparkReward: 0, // Would need more context to get actual reward
+        sparkReward: sparkDelta,
         ticketReward: 0,
         timestamp: Date.now(),
         isBot: false,
@@ -71,10 +78,10 @@ export function AdminSync() {
     // Track games played
     if (gameState.roundsPlayed > lastGames.current) {
       addActivityLog({
-        type: "purchase",
+        type: "admin_action",
         userId: user.id,
         username: gameState.username,
-        details: { action: "play_round" },
+        details: { action: "play_round", total: gameState.roundsPlayed },
         severity: "info",
       });
     }

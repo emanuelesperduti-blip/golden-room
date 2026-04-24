@@ -16,7 +16,8 @@ import sparkIcon from "@/assets/icon-spark.png";
 import { useGameStore, MISSIONS_CONFIG } from "@/lib/gameStore";
 import { useAuth } from "@/hooks/useAuth";
 import { useViewerGameState } from "@/hooks/useViewerGameState";
-import { BOTS, recentBotWins, ROOMS as BOT_ROOMS } from "@/lib/bots";
+import { BOTS, recentBotWins } from "@/lib/bots";
+import { ROOMS as BOT_ROOMS } from "@/lib/rooms";
 import { useAudio } from "@/hooks/useAudio";
 
 export const Route = createFileRoute("/")(
@@ -371,7 +372,7 @@ function HomePage() {
 
 // ─── Community Feed ───────────────────────────────────────────
 function CommunityFeed() {
-  const ROOMS_NAMES = ["Night Bingo Rush", "Golden City", "Royal VIP Hall", "Neon Newcomer"];
+  const ROOMS_NAMES = BOT_ROOMS.map((r) => r.name);
   const [items, setItems] = useState(() =>
     BOTS.slice(0, 3).map((b, i) => ({
       id: i,
