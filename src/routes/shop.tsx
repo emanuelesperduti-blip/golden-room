@@ -201,10 +201,11 @@ function ShopPage() {
 
   // ── Item definitions ────────────────────────────────────────
   const ticketItems: PurchaseItem[] = [
-    { id: "t1", name: "5 Ticket", description: "Entra in 5 partite di Bingo", price: "40 Spark", priceNum: 40, img: shopTickets, action: () => addTickets(5) },
-    { id: "t2", name: "15 Ticket", description: "Il pacchetto più popolare", price: "110 Spark", priceNum: 110, img: shopTickets, badge: "POPOLARE", action: () => addTickets(15) },
-    { id: "t3", name: "40 Ticket", description: "Scorte per una settimana", price: "260 Spark", priceNum: 260, img: shopTickets, badge: "BEST VALUE", action: () => addTickets(40) },
-    { id: "t4", name: "100 Ticket", description: "Per i giocatori seri", price: "620 Spark", priceNum: 620, img: shopTickets, badge: "VIP", action: () => addTickets(100) },
+    { id: "t1", name: "5 Ticket",   description: "Entra in 5 partite di Bingo",   price: "40 Spark",  priceNum: 40,  img: shopTickets, action: () => addTickets(5) },
+    { id: "t2", name: "15 Ticket",  description: "Ottimo per iniziare",            price: "115 Spark", priceNum: 115, img: shopTickets, badge: "POPOLARE",  action: () => addTickets(15) },
+    { id: "t3", name: "20 Ticket",  description: "Il più scelto ogni giorno",      price: "150 Spark", priceNum: 150, img: shopTickets, badge: "BEST VALUE", action: () => addTickets(20) },
+    { id: "t4", name: "40 Ticket",  description: "Scorte per una settimana",       price: "260 Spark", priceNum: 260, img: shopTickets, action: () => addTickets(40) },
+    { id: "t5", name: "100 Ticket", description: "Per i giocatori seri",           price: "620 Spark", priceNum: 620, img: shopTickets, badge: "VIP",        action: () => addTickets(100) },
   ];
 
   const utilityItems: PurchaseItem[] = [
@@ -297,9 +298,9 @@ function ShopPage() {
 
       {/* Ticket Bundles */}
       <Section label="Ticket" icon={<Ticket className="h-4 w-4" />}>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="space-y-2">
           {ticketItems.map((item, i) => (
-            <ItemCard key={item.id} item={item} delay={i * 0.04} onBuy={() => openModal(item)} />
+            <ItemRow key={item.id} item={item} delay={i * 0.04} onBuy={() => openModal(item)} />
           ))}
         </div>
       </Section>
