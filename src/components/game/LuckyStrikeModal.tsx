@@ -531,11 +531,9 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
                     <span style={{fontSize:"clamp(10px,1.8svh,13px)",fontWeight:800,color:"#fde047"}}>{sparks}</span>
                     <span style={{fontSize:"clamp(9px,1.6svh,12px)",color:"rgba(255,255,255,0.4)"}}>· {COST} Spark/grattata</span>
                   </div>
-                  {phase==="idle" && (
-                    <div style={{width:"100%",borderRadius:999,padding:"3px 12px",background:"rgba(0,0,0,0.38)",border:"1px solid rgba(255,255,255,0.08)"}}>
-                      <Ticker/>
-                    </div>
-                  )}
+                  <div style={{width:"100%",borderRadius:999,padding:"3px 12px",background:"rgba(0,0,0,0.38)",border:"1px solid rgba(255,255,255,0.08)",boxShadow:"inset 0 0 12px rgba(245,180,0,0.08)"}}>
+                    <Ticker/>
+                  </div>
                 </div>
 
                 {/* Toast */}
@@ -564,7 +562,7 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
                 {/* ── INNER CARD: flex:1, fills remaining height ── */}
                 <div style={{
                   flex:1, minHeight:0,
-                  margin:"0 10px clamp(4px,0.8svh,8px)",
+                  margin:"0 10px clamp(3px,0.55svh,6px)",
                   borderRadius:22,
                   overflow:"hidden",
                   background:"rgba(4,0,28,0.55)",
@@ -574,7 +572,7 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
                   flexDirection:"column",
                 }}>
                   {/* SCRATCH AREA label */}
-                  <div style={{flexShrink:0,display:"flex",justifyContent:"center",padding:"clamp(6px,1.2svh,10px) 0 clamp(4px,0.8svh,8px)"}}>
+                  <div style={{flexShrink:0,display:"flex",justifyContent:"center",padding:"clamp(5px,0.9svh,8px) 0 clamp(3px,0.55svh,6px)"}}>
                     <div style={{background:"linear-gradient(135deg,#3e1480,#250960)",borderRadius:999,border:"1.5px solid rgba(200,120,255,0.45)",padding:"4px 22px"}}>
                       <span style={{fontFamily:"Impact,system-ui",fontSize:"clamp(10px,1.8svh,13px)",letterSpacing:"0.2em",color:"white",textTransform:"uppercase"}}>SCRATCH AREA</span>
                     </div>
@@ -594,7 +592,7 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
 
                   {/* No prize */}
                   {phase==="result"&&!winner && (
-                    <div style={{flexShrink:0,textAlign:"center",padding:"clamp(4px,0.8svh,8px) 0"}}>
+                    <div style={{flexShrink:0,textAlign:"center",padding:"clamp(3px,0.55svh,6px) 0"}}>
                       <span style={{fontSize:"clamp(24px,4svh,36px)"}}>😔</span>
                       <p style={{fontSize:"clamp(11px,1.8svh,15px)",fontWeight:800,color:"rgba(255,255,255,0.65)"}}>Nessun premio</p>
                     </div>
@@ -611,23 +609,21 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
                   </div>
                 </div>
 
-                {/* Prize table – only idle */}
-                {phase==="idle" && (
-                  <div style={{flexShrink:0,display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:"clamp(4px,0.8svh,6px)",padding:"0 10px clamp(4px,0.8svh,8px)"}}>
-                    {PRIZES.map(p=>(
-                      <div key={p.symbol} style={{borderRadius:10,padding:"clamp(4px,0.8svh,6px) 4px",background:"rgba(0,0,0,0.38)",border:`1px solid ${p.color}33`,display:"flex",flexDirection:"column",alignItems:"center",gap:2}}>
-                        <PrizeIcon prize={p} size={20}/>
-                        <span style={{fontSize:"clamp(8px,1.4svh,10px)",fontWeight:800,color:p.color,textAlign:"center",lineHeight:1.1}}>{p.label}</span>
-                        <span style={{fontSize:"clamp(7px,1.2svh,9px)",color:"rgba(255,255,255,0.3)"}}>3×</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
+                {/* Prize table - always visible so PLAY keeps the same premium UI */}
+                <div style={{flexShrink:0,display:"grid",gridTemplateColumns:"repeat(4,minmax(0,1fr))",gap:"clamp(3px,0.65svh,6px)",padding:"0 10px clamp(4px,0.75svh,7px)"}}>
+                  {PRIZES.map(p=>(
+                    <div key={p.symbol} style={{borderRadius:10,padding:"clamp(3px,0.65svh,5px) 3px",background:"rgba(0,0,0,0.38)",border:`1px solid ${p.color}33`,display:"flex",flexDirection:"column",alignItems:"center",gap:1,boxShadow:`inset 0 0 10px ${p.color}12`}}>
+                      <PrizeIcon prize={p} size={18}/>
+                      <span style={{fontSize:"clamp(7px,1.15svh,9px)",fontWeight:900,color:p.color,textAlign:"center",lineHeight:1.05}}>{p.label}</span>
+                      <span style={{fontSize:"clamp(6px,1svh,8px)",color:"rgba(255,255,255,0.36)",fontWeight:800}}>3x</span>
+                    </div>
+                  ))}
+                </div>
 
                 {/* Buttons */}
                 <div style={{flexShrink:0,display:"flex",gap:"clamp(8px,1.5svh,12px)",padding:`0 10px`}}>
                   {phase==="idle"    && (<><GoldBtn onClick={handlePlay} disabled={authLoading || (!!user && sparks<COST)} flex1>🎰 PLAY</GoldBtn><GoldBtn onClick={onClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
-                  {phase==="playing" && (<><GoldBtn onClick={onClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
+                  {phase==="playing" && (<><GoldBtn onClick={()=>showToast("Gratta le caselle per rivelare il premio")} flex1>✦ GRATTA ORA</GoldBtn><GoldBtn onClick={onClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
                   {phase==="result"  && (<><GoldBtn onClick={reset} disabled={authLoading || (!!user && sparks<COST)} flex1>🎰 RIGIOCA</GoldBtn><GoldBtn onClick={onClose} flex1 variant="dim">CHIUDI</GoldBtn></>)}
                 </div>
 
