@@ -21,7 +21,7 @@ export const Route = createFileRoute("/reveal")({
   component: RevealPage,
 });
 
-type RewardKind = "spark" | "ticket" | "coin" | "gem" | "premium_reveal";
+type RewardKind = "spark" | "ticket" | "gem" | "premium_reveal";
 
 interface Reward {
   type: RewardKind;
@@ -35,7 +35,7 @@ const FREE_REWARDS: Reward[] = [
   { type: "spark", value: 8, label: "+8 Spark", emoji: "⚡", color: "oklch(0.85 0.18 90)" },
   { type: "spark", value: 12, label: "+12 Spark", emoji: "⚡", color: "oklch(0.85 0.18 90)" },
   { type: "ticket", value: 1, label: "+1 Ticket", emoji: "🎫", color: "oklch(0.78 0.16 220)" },
-  { type: "coin", value: 120, label: "+120 Coin", emoji: "🪙", color: "oklch(0.7 0.25 25)" },
+  { type: "spark", value: 10, label: "+10 Spark", emoji: "⚡", color: "oklch(0.85 0.18 90)" },
 ];
 
 const PREMIUM_REWARDS: Reward[] = [
@@ -44,7 +44,7 @@ const PREMIUM_REWARDS: Reward[] = [
   { type: "ticket", value: 2, label: "+2 Ticket", emoji: "🎫", color: "oklch(0.78 0.16 220)" },
   { type: "ticket", value: 3, label: "+3 Ticket", emoji: "🎟️", color: "oklch(0.78 0.16 220)" },
   { type: "gem", value: 1, label: "+1 Gemma", emoji: "💎", color: "oklch(0.72 0.28 250)" },
-  { type: "coin", value: 250, label: "+250 Coin", emoji: "🪙", color: "oklch(0.7 0.25 25)" },
+  { type: "spark", value: 45, label: "+45 Spark", emoji: "⚡", color: "oklch(0.85 0.18 90)" },
   { type: "premium_reveal", value: 1, label: "+1 Reveal Extra", emoji: "🎁", color: "oklch(0.7 0.28 350)" },
 ];
 
@@ -60,7 +60,6 @@ function RevealPage() {
   const usePremiumReveal = useGameStore((s) => s.usePremiumReveal);
   const addSparks = useGameStore((s) => s.addSparks);
   const addTickets = useGameStore((s) => s.addTickets);
-  const addCoins = useGameStore((s) => s.addCoins);
   const addGems = useGameStore((s) => s.addGems);
   const addPremiumReveals = useGameStore((s) => s.addPremiumReveals);
   const incrementRevealsOpened = useGameStore((s) => s.incrementRevealsOpened);
@@ -80,7 +79,6 @@ function RevealPage() {
     switch (r.type) {
       case "spark": addSparks(r.value); break;
       case "ticket": addTickets(r.value); break;
-      case "coin": addCoins(r.value); break;
       case "gem": addGems(r.value); break;
       case "premium_reveal": addPremiumReveals(r.value); break;
     }
@@ -133,7 +131,7 @@ function RevealPage() {
     setReward(null);
   }
 
-  const canPremium = premiumRevealsLeft > 0 || tickets >= 2 || vip;
+  const canPremium = premiumRevealsLeft > 0 || tickets >= 2;
   const canFree = !dailyRevealUsed;
 
   return (
@@ -294,7 +292,7 @@ function RevealPage() {
           <div className="mt-6 w-full max-w-xs rounded-2xl border border-gold/30 bg-[linear-gradient(135deg,oklch(0.25_0.1_60/0.6),oklch(0.18_0.08_300/0.6))] p-3 text-center">
             <p className="text-xs font-bold text-gold/80">
               <Crown className="mr-1 inline h-3.5 w-3.5" />
-              VIP Pass — reveal premium illimitati al prezzo ridotto!
+              VIP Pass — pacchetti Reveal Premium e room esclusive!
             </p>
             <Link to="/shop">
               <button className="mt-2 rounded-xl bg-gold-shine px-4 py-1.5 text-xs font-extrabold text-purple-deep">

@@ -15,7 +15,6 @@ import {
   SlidersHorizontal,
   MessageSquareText,
   Rabbit,
-  Coins,
   Zap,
   AlertCircle,
   Bell,
@@ -69,7 +68,7 @@ function AdminPage() {
     const t = setInterval(() => setNow(Date.now()), 5000);
     return () => clearInterval(t);
   }, []);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "currencies" | "rooms" | "users" | "leaderboard" | "notifications" | "maintenance" | "events" | "logs">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "currencies" | "rooms" | "users" | "leaderboard" | "notifications" | "maintenance" | "events" | "logs" | "email">("dashboard");
 
   // Admin store
   const {
@@ -199,7 +198,8 @@ function AdminPage() {
         <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
           {[
             { id: "dashboard", label: "Dashboard", icon: BarChart3 },
-            { id: "currencies", label: "Valute", icon: Coins },
+            { id: "currencies", label: "Valute", icon: Sparkles },
+            { id: "email", label: "Email", icon: Send },
             { id: "rooms", label: "Room", icon: SlidersHorizontal },
             { id: "users", label: "Utenti", icon: Users },
             { id: "leaderboard", label: "Classifica", icon: TrendingUp },
@@ -287,6 +287,8 @@ function AdminPage() {
 
         {/* Step 5: Currencies Tab */}
         {activeTab === "currencies" && <CurrenciesTab currencyConfig={currencyConfig} setCurrencyConfig={setCurrencyConfig} assignCreditsToAll={assignCreditsToAll} addActivityLog={addActivityLog} />}
+
+        {activeTab === "email" && <EmailSettingsTab addActivityLog={addActivityLog} />}
 
         {/* Step 6: Rooms Tab */}
         {activeTab === "rooms" && (
@@ -456,6 +458,46 @@ function AdminPage() {
   );
 }
 
+function EmailSettingsTab({ addActivityLog }: { addActivityLog: (log: any) => void }) {
+  const [fromEmail, setFromEmail] = useState(() => localStorage.getItem("gamespark-sendgrid-from-email") || "noreply@gamespark.app");
+  const [fromName, setFromName] = useState(() => localStorage.getItem("gamespark-sendgrid-from-name") || "Golden Room");
+  const [apiKey, setApiKey] = useState(() => localStorage.getItem("gamespark-sendgrid-api-key") || "");
+  const [templateId, setTemplateId] = useState(() => localStorage.getItem("gamespark-sendgrid-template-id") || "");
+  const [functionUrl, setFunctionUrl] = useState(() => localStorage.getItem("gamespark-sendgrid-function-url") || "");
+
+  const save = () => {
+    localStorage.setItem("gamespark-sendgrid-from-email", fromEmail.trim());
+    localStorage.setItem("gamespark-sendgrid-from-name", fromName.trim());
+    localStorage.setItem("gamespark-sendgrid-api-key", apiKey.trim());
+    localStorage.setItem("gamespark-sendgrid-template-id", templateId.trim());
+    localStorage.setItem("gamespark-sendgrid-function-url", functionUrl.trim());
+    addActivityLog({ type: "admin_action", details: { action: "save_sendgrid_settings", fromEmail, templateIdConfigured: !!templateId, functionUrlConfigured: !!functionUrl }, severity: "info" });
+  };
+
+  return (
+    <section className="mt-4 space-y-4">
+      <div className="rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
+        <div className="flex items-center gap-2 mb-4">
+          <Send className="h-5 w-5 text-gold" />
+          <p className="text-sm font-black text-white">SendGrid Email</p>
+        </div>
+        <p className="mb-4 text-xs font-semibold leading-relaxed text-white/55">
+          Impostazioni per inviare email di conferma dal dominio reale invece dei link Lovable. In produzione usa la funzione interna / Supabase Edge Function e salva la API key come secret server-side.
+        </p>
+        <div className="grid grid-cols-1 gap-3">
+          <label className="block"><p className="text-xs font-bold text-white/60 mb-2">Mittente email</p><input value={fromEmail} onChange={(e) => setFromEmail(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none" /></label>
+          <label className="block"><p className="text-xs font-bold text-white/60 mb-2">Nome mittente</p><input value={fromName} onChange={(e) => setFromName(e.target.value)} className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none" /></label>
+          <label className="block"><p className="text-xs font-bold text-white/60 mb-2">SendGrid API key</p><input type="password" value={apiKey} onChange={(e) => setApiKey(e.target.value)} placeholder="SG.xxxxx" className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none" /></label>
+          <label className="block"><p className="text-xs font-bold text-white/60 mb-2">Template ID conferma email</p><input value={templateId} onChange={(e) => setTemplateId(e.target.value)} placeholder="d-xxxxxxxx" className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none" /></label>
+          <label className="block"><p className="text-xs font-bold text-white/60 mb-2">Endpoint API interna</p><input value={functionUrl} onChange={(e) => setFunctionUrl(e.target.value)} placeholder="/functions/v1/send-confirmation-email" className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none" /></label>
+          <button onClick={save} className="mt-2 w-full rounded-2xl border border-gold/50 bg-gold/20 px-4 py-2 text-sm font-extrabold text-gold hover:bg-gold/30 transition-all">Salva impostazioni SendGrid</button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+
 // ─────────────────────────────────────────────────────────────────────────────
 // STEP 5: Currencies Tab Component
 // ─────────────────────────────────────────────────────────────────────────────
@@ -473,30 +515,26 @@ function CurrenciesTab({
 }) {
   const [sparksInput, setSparksInput] = useState("0");
   const [ticketsInput, setTicketsInput] = useState("0");
-  const [coinsInput, setCoinsInput] = useState("0");
 
   const handleAssignAll = () => {
     const sparks = parseInt(sparksInput) || 0;
     const tickets = parseInt(ticketsInput) || 0;
-    const coins = parseInt(coinsInput) || 0;
-
-    assignCreditsToAll(sparks, tickets, coins);
+    assignCreditsToAll(sparks, tickets, 0);
     addActivityLog({
       type: "admin_action",
-      details: { action: "assign_credits_all", sparks, tickets, coins },
+      details: { action: "assign_credits_all", sparks, tickets },
       severity: "info",
     });
 
     setSparksInput("0");
     setTicketsInput("0");
-    setCoinsInput("0");
   };
 
   return (
     <section className="mt-4 space-y-4">
       <div className="rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
         <div className="flex items-center gap-2 mb-4">
-          <Coins className="h-5 w-5 text-gold" />
+          <Sparkles className="h-5 w-5 text-gold" />
           <p className="text-sm font-black text-white">Configurazione valute</p>
         </div>
 
@@ -517,16 +555,6 @@ function CurrenciesTab({
               type="number"
               value={currencyConfig.ticketValue}
               onChange={(e) => setCurrencyConfig({ ticketValue: Number(e.target.value) })}
-              className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
-            />
-          </label>
-
-          <label className="block">
-            <p className="text-xs font-bold text-white/60 mb-2">Valore Coin/Token</p>
-            <input
-              type="number"
-              value={currencyConfig.coinValue}
-              onChange={(e) => setCurrencyConfig({ coinValue: Number(e.target.value) })}
               className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
             />
           </label>
@@ -553,16 +581,6 @@ function CurrenciesTab({
               type="number"
               value={ticketsInput}
               onChange={(e) => setTicketsInput(e.target.value)}
-              className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
-            />
-          </label>
-
-          <label className="block">
-            <p className="text-xs font-bold text-white/60 mb-2">Coin da aggiungere</p>
-            <input
-              type="number"
-              value={coinsInput}
-              onChange={(e) => setCoinsInput(e.target.value)}
               className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
             />
           </label>
@@ -715,7 +733,7 @@ function RoomsTab({
               {/* Chat pace */}
               <div>
                 <p className="text-xs font-bold text-white mb-2">Frequenza chat bot</p>
-                <div className="grid grid-cols-3 gap-1.5">
+                <div className="grid grid-cols-2 gap-1.5">
                   {(["bassa", "media", "alta"] as const).map((pace) => (
                     <button
                       key={pace}
@@ -833,10 +851,6 @@ function UsersTab({
                     <div>
                       <p className="text-white/60">Ticket</p>
                       <p className="font-bold text-white">{user.tickets}</p>
-                    </div>
-                    <div>
-                      <p className="text-white/60">Coin</p>
-                      <p className="font-bold text-white">{user.coins}</p>
                     </div>
                   </div>
 

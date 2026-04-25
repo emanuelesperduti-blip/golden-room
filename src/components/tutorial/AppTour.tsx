@@ -36,7 +36,7 @@ const TOUR_STEPS: Record<string, TourStep[]> = {
     },
     {
       title: 'Token e saldi',
-      body: 'Qui controlli Coin, Spark e Ticket in tempo reale.',
+      body: 'Qui controlli Spark e Ticket in tempo reale.',
       target: '[data-tour="topbar-wallet"]',
     },
     {
@@ -104,7 +104,7 @@ const TOUR_STEPS: Record<string, TourStep[]> = {
     },
     {
       title: 'Statistiche',
-      body: 'In questa griglia vedi Spark, Ticket, Coin e risultati di gioco.',
+      body: 'In questa griglia vedi Spark, Ticket e risultati di gioco.',
       target: '[data-tour="profile-stats"]',
     },
     {

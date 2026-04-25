@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
+import { useGameStore } from "@/lib/gameStore";
 
 // Lazy import supabase to avoid crash if env vars missing
 let _supabase: any = null;
@@ -118,6 +119,29 @@ function writeLocalSession(account: LocalAccount | null) {
   window.localStorage.setItem(LOCAL_SESSION_KEY, JSON.stringify(account));
 }
 
+async function sendCustomConfirmationEmail(email: string, name: string) {
+  if (typeof window === "undefined") return;
+  const endpoint = window.localStorage.getItem("gamespark-sendgrid-function-url") || "";
+  if (!endpoint.trim()) return;
+  try {
+    await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        email,
+        name,
+        redirectTo: window.location.origin + "/auth",
+        fromEmail: window.localStorage.getItem("gamespark-sendgrid-from-email") || "noreply@gamespark.app",
+        fromName: window.localStorage.getItem("gamespark-sendgrid-from-name") || "Golden Room",
+        templateId: window.localStorage.getItem("gamespark-sendgrid-template-id") || undefined,
+        sendGridApiKey: window.localStorage.getItem("gamespark-sendgrid-api-key") || undefined,
+      }),
+    });
+  } catch (e) {
+    console.warn("SendGrid confirmation email not sent", e);
+  }
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [localUser, setLocalUser] = useState<AuthUser | null>(null);
@@ -230,8 +254,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { error } = await sb.auth.signUp({
           email: normalizedEmail,
           password: normalizedPassword,
-          options: { data: { full_name: normalizedName } },
+          options: {
+            data: { full_name: normalizedName },
+            emailRedirectTo: typeof window !== "undefined" ? window.location.origin + "/auth" : undefined,
+          },
         });
+        if (!error) {
+          useGameStore.getState().resetForNewUser(normalizedName);
+          void sendCustomConfirmationEmail(normalizedEmail, normalizedName);
+        }
         return { error: error?.message };
       }
     } catch (e: any) {
@@ -257,6 +288,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     writeLocalAccounts([...accounts, account]);
     writeLocalSession(account);
+    useGameStore.getState().resetForNewUser(normalizedName);
     setLocalUser(localAccountToUser(account));
     setLoading(false);
     return {};

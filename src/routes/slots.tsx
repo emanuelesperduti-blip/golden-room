@@ -6,7 +6,6 @@ import confetti from "canvas-confetti";
 import { MobileShell } from "@/components/game/MobileShell";
 import { GameButton } from "@/components/game/GameButton";
 import sparkIcon from "@/assets/icon-spark.png";
-import coinIcon from "@/assets/icon-coin.png";
 import { useGameStore } from "@/lib/gameStore";
 import { useAudio } from "@/hooks/useAudio";
 
@@ -44,21 +43,9 @@ const REEL_POOL = [
   ...Array(1).fill(SYMBOLS[7]),
 ];
 
-type BetMode = "coin" | "spark";
+type BetMode = "spark";
 
 interface BetConfig { label: string; value: number; }
-const COIN_BETS: BetConfig[] = [
-  { label: "50", value: 50 },
-  { label: "100", value: 100 },
-  { label: "200", value: 200 },
-  { label: "500", value: 500 },
-];
-const SPARK_BETS: BetConfig[] = [
-  { label: "5", value: 5 },
-  { label: "10", value: 10 },
-  { label: "25", value: 25 },
-];
-
 // ─── Reel Component ────────────────────────────────────────────
 interface ReelProps {
   spinning: boolean;
@@ -147,7 +134,7 @@ function PayTable({ betMode, bet }: { betMode: BetMode; bet: number }) {
         <div key={s.id} className="flex items-center justify-between gap-2">
           <span className="text-base">{s.emoji} {s.emoji} {s.emoji}</span>
           <span className="text-xs font-extrabold" style={{ color: s.color }}>
-            ×{s.mult} → {bet * s.mult} {betMode === "coin" ? "🪙" : "⚡"}
+            ×{s.mult} → {bet * s.mult} ⚡
           </span>
         </div>
       ))}
@@ -158,23 +145,12 @@ function PayTable({ betMode, bet }: { betMode: BetMode; bet: number }) {
 // ─── Main Page ─────────────────────────────────────────────────
 function SlotsPage() {
   const { sfx } = useAudio();
-  const coins = useGameStore((s) => s.coins);
   const sparks = useGameStore((s) => s.sparks);
   const spendSparks = useGameStore((s) => s.spendSparks);
   const addSparks = useGameStore((s) => s.addSparks);
-  const addCoins = useGameStore((s) => s.addCoins);
-  const spendCoins = useCallback(
-    (n: number) => {
-      if (coins < n) return false;
-      useGameStore.setState((s) => ({ coins: Math.max(0, s.coins - n) }));
-      return true;
-    },
-    [coins],
-  );
-
-  const [betMode, setBetMode] = useState<BetMode>("coin");
+  const [betMode] = useState<BetMode>("spark");
   const [betIdx, setBetIdx] = useState(0);
-  const betList = betMode === "coin" ? COIN_BETS : SPARK_BETS;
+  const betList = SPARK_BETS;
   const bet = betList[betIdx].value;
 
   const [spinning, setSpinning] = useState(false);
@@ -198,8 +174,7 @@ function SlotsPage() {
     sfx("tap");
 
     // Spend resources
-    if (betMode === "coin" && !spendCoins(bet)) { sfx("error"); showToast("Coin insufficienti!"); return; }
-    if (betMode === "spark" && !spendSparks(bet)) { sfx("error"); showToast("Spark insufficienti!"); return; }
+    if (!spendSparks(bet)) { sfx("error"); showToast("Spark insufficienti!"); return; }
 
     // Generate result
     const r1 = REEL_POOL[Math.floor(Math.random() * REEL_POOL.length)];
@@ -243,8 +218,7 @@ function SlotsPage() {
     const [a, b, c] = symbols;
     if (a.id === b.id && b.id === c.id) {
       const winAmount = bet * a.mult;
-      if (betMode === "coin") addCoins(winAmount);
-      else addSparks(winAmount);
+      addSparks(winAmount);
       setResult({ win: true, amount: winAmount, symbol: a });
       setTotalWon((t) => t + winAmount);
       sfx("claim");
@@ -297,8 +271,8 @@ function SlotsPage() {
             <p className="text-lg font-extrabold text-gold">{totalWon}</p>
           </div>
           <div className="rounded-2xl border border-white/10 bg-card-game px-3 py-2 text-center">
-            <p className="text-[10px] font-bold text-white/50 uppercase tracking-wider">{betMode === "coin" ? "Coin" : "Spark"}</p>
-            <p className="text-lg font-extrabold text-white">{betMode === "coin" ? coins.toLocaleString("it-IT") : sparks}</p>
+            <p className="text-[10px] font-bold text-white/50 uppercase tracking-wider">Spark</p>
+            <p className="text-lg font-extrabold text-white">{sparks}</p>
           </div>
         </div>
 
@@ -341,7 +315,7 @@ function SlotsPage() {
                     <p className="text-2xl font-extrabold text-gold text-stroke-thin animate-bounce">
                       🎉 {result.symbol?.emoji} × {result.symbol?.mult} = +{result.amount}
                     </p>
-                    <p className="text-xs text-white/70">{betMode === "coin" ? "Coin" : "Spark"} aggiunti!</p>
+                    <p className="text-xs text-white/70">Spark aggiunti!</p>
                   </>
                 ) : (
                   <p className="text-sm font-bold text-white/50">Nessuna combinazione… ritenta!</p>
@@ -358,7 +332,7 @@ function SlotsPage() {
                   <RefreshCw className="h-6 w-6" />
                 </motion.span>
               ) : (
-                <><Zap className="h-6 w-6" /> GIRA! — {bet} {betMode === "coin" ? "🪙" : "⚡"}</>
+                <><Zap className="h-6 w-6" /> GIRA! — {bet} ⚡</>
               )}
             </GameButton>
           </div>
@@ -370,16 +344,7 @@ function SlotsPage() {
           <div className="flex gap-2">
             <button
               type="button"
-              onClick={() => { setBetMode("coin"); setBetIdx(0); }}
-              className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-extrabold transition ${
-                betMode === "coin" ? "bg-gold-shine text-purple-deep shadow-button-gold" : "bg-white/5 text-white/50"
-              }`}
-            >
-              <img src={coinIcon} alt="" className="h-4 w-4" /> Coin
-            </button>
-            <button
-              type="button"
-              onClick={() => { setBetMode("spark"); setBetIdx(0); }}
+              onClick={() => { setBetIdx(0); }}
               className={`flex-1 flex items-center justify-center gap-1.5 rounded-xl py-2 text-xs font-extrabold transition ${
                 betMode === "spark" ? "bg-magenta-grad text-white shadow-button-game" : "bg-white/5 text-white/50"
               }`}

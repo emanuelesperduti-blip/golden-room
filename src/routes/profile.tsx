@@ -5,7 +5,6 @@ import { Crown, Flame, Trophy, Star, Award, Zap, Edit2, Check, LogOut, LogIn, Pa
 import { MobileShell } from "@/components/game/MobileShell";
 import { Badge } from "@/components/game/Badge";
 import sparkIcon from "@/assets/icon-spark.png";
-import coinIcon from "@/assets/icon-coin.png";
 import { useGameStore } from "@/lib/gameStore";
 import { useAuth } from "@/hooks/useAuth";
 import { isAdminUser } from "@/lib/admin";
@@ -62,7 +61,6 @@ function ProfilePage() {
     xp,
     streak,
     sparks,
-    coins,
     tickets,
     vip,
     rank,
@@ -258,7 +256,6 @@ function ProfilePage() {
         <div className="grid grid-cols-3 gap-2">
           <StatCard value={sparks} label="Spark" img={sparkIcon} />
           <StatCard value={tickets} label="Ticket" emoji="🎫" />
-          <StatCard value={coins.toLocaleString("it-IT")} label="Coin" img={coinIcon} />
           <StatCard value={bingosWon} label="Bingo Vinti" emoji="🏆" />
           <StatCard value={revealsOpened} label="Reveal" emoji="✨" />
           <StatCard value={completedMissions} label="Missioni" emoji="🎯" />

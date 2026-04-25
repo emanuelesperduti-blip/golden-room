@@ -36,7 +36,7 @@ interface Prize {
   symbol: string;
   label: string;
   value: number;
-  valueType: "spark" | "ticket" | "coin";
+  valueType: "spark" | "ticket";
   color: string;
   weight: number;
 }
@@ -45,22 +45,22 @@ interface Prize {
 const FREE_PRIZES: Prize[] = [
   { symbol: "⭐", label: "+15 Spark", value: 15, valueType: "spark", color: "#f5b400", weight: 40 },
   { symbol: "🎫", label: "+1 Ticket", value: 1, valueType: "ticket", color: "#67e8f9", weight: 20 },
-  { symbol: "💰", label: "+80 Coin", value: 80, valueType: "coin", color: "#fde68a", weight: 30 },
+  { symbol: "⚡", label: "+20 Spark", value: 20, valueType: "spark", color: "#f5b400", weight: 30 },
   { symbol: "❌", label: "Niente", value: 0, valueType: "spark", color: "#666", weight: 60 },
 ];
 
 const SILVER_PRIZES: Prize[] = [
   { symbol: "⚡", label: "+60 Spark", value: 60, valueType: "spark", color: "#f5b400", weight: 30 },
   { symbol: "🎫", label: "+2 Ticket", value: 2, valueType: "ticket", color: "#67e8f9", weight: 15 },
-  { symbol: "💰", label: "+200 Coin", value: 200, valueType: "coin", color: "#fde68a", weight: 25 },
-  { symbol: "💎", label: "+1 Gemma", value: 1, valueType: "coin", color: "#c084fc", weight: 10 },
+  { symbol: "⚡", label: "+80 Spark", value: 80, valueType: "spark", color: "#f5b400", weight: 25 },
+  { symbol: "🎫", label: "+3 Ticket", value: 3, valueType: "ticket", color: "#67e8f9", weight: 10 },
   { symbol: "❌", label: "Niente", value: 0, valueType: "spark", color: "#666", weight: 50 },
 ];
 
 const GOLD_PRIZES: Prize[] = [
   { symbol: "🌟", label: "+150 Spark", value: 150, valueType: "spark", color: "#f5b400", weight: 25 },
   { symbol: "🎟️", label: "+5 Ticket", value: 5, valueType: "ticket", color: "#67e8f9", weight: 15 },
-  { symbol: "💰", label: "+500 Coin", value: 500, valueType: "coin", color: "#fde68a", weight: 20 },
+  { symbol: "⚡", label: "+220 Spark", value: 220, valueType: "spark", color: "#f5b400", weight: 20 },
   { symbol: "👑", label: "+300 Spark JACKPOT", value: 300, valueType: "spark", color: "#ff3da6", weight: 5 },
   { symbol: "❌", label: "Niente", value: 0, valueType: "spark", color: "#666", weight: 35 },
 ];
@@ -283,7 +283,6 @@ function ScratchPage() {
   const spendTickets = useGameStore((s) => s.spendTickets);
   const addSparks = useGameStore((s) => s.addSparks);
   const addTickets = useGameStore((s) => s.addTickets);
-  const addCoins = useGameStore((s) => s.addCoins);
 
   const [selectedTier, setSelectedTier] = useState<CardTier>("free");
   const [grid, setGrid] = useState<Prize[] | null>(null);
@@ -332,7 +331,6 @@ function ScratchPage() {
         // Apply reward
         if (w.valueType === "spark") addSparks(w.value);
         else if (w.valueType === "ticket") addTickets(w.value);
-        else if (w.valueType === "coin") addCoins(w.value);
       }
     }
     if (next.every(Boolean)) setPhase("result");
@@ -350,7 +348,6 @@ function ScratchPage() {
       confetti({ particleCount: 180, spread: 90, origin: { y: 0.45 }, colors: ["#f5b400", "#ff3da6", "#7c3aed"] });
       if (w.valueType === "spark") addSparks(w.value);
       else if (w.valueType === "ticket") addTickets(w.value);
-      else if (w.valueType === "coin") addCoins(w.value);
     }
     setPhase("result");
   }

@@ -1,6 +1,5 @@
 import { Crown, Volume2, VolumeX, Ticket, Palette, HelpCircle } from "lucide-react";
 import { Link } from "@tanstack/react-router";
-import coinIcon from "@/assets/icon-coin.png";
 import sparkIcon from "@/assets/icon-spark.png";
 import { useGameStore } from "@/lib/gameStore";
 import { useViewerGameState } from "@/hooks/useViewerGameState";
@@ -8,7 +7,7 @@ import { useAudio } from "@/hooks/useAudio";
 import { useAppTour } from "@/components/tutorial/AppTour";
 
 export function TopBar() {
-  const { coins, sparks, tickets, vip, streak } = useViewerGameState();
+  const { sparks, tickets, vip, streak } = useViewerGameState();
   const muted = useGameStore((s) => s.muted);
   const theme = useGameStore((s) => s.theme);
   const toggleMute = useGameStore((s) => s.toggleMute);
@@ -27,11 +26,6 @@ export function TopBar() {
       }}
     >
       <div className="flex items-center gap-2 px-4 pt-2.5 pb-1" data-tour="topbar-wallet">
-        <Link to="/shop" className="flex items-center gap-1.5 rounded-full border border-white/15 bg-black/30 px-3 py-1 active:scale-95">
-          <img src={coinIcon} alt="" className="h-4 w-4" />
-          <span className="text-xs font-extrabold text-gold">{coins.toLocaleString("it-IT")}</span>
-        </Link>
-
         <Link to="/shop" className="flex items-center gap-1.5 rounded-full border border-white/15 bg-black/30 px-3 py-1 active:scale-95">
           <img src={sparkIcon} alt="" className="h-4 w-4" />
           <span className="text-xs font-extrabold text-white">{sparks}</span>

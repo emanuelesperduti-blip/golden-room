@@ -77,7 +77,7 @@ function HomePage() {
     if (!result.ok) { sfx("error"); showToast("Early Bird già riscattato oggi!"); return; }
     sfx("claim");
     confetti({ particleCount: 100, spread: 70, origin: { y: 0.5 }, colors: ["#f5b400", "#ff3da6"] });
-    showToast("⚡ Early Bird! +50 Spark +200 Coin +1 Reveal Premium");
+    showToast("⚡ Early Bird! +50 Spark +1 Reveal Premium");
   }
 
   // Shop items now go through proper purchase flow in /shop
@@ -303,7 +303,7 @@ function HomePage() {
             <div>
               <h3 className="text-2xl font-extrabold tracking-tight text-white drop-shadow-[0_2px_0_rgba(52,16,92,0.95)]" style={{ textShadow: "0 1px 0 rgba(255,255,255,0.15), 0 3px 8px rgba(91,33,182,0.55), 2px 2px 0 rgba(76,29,149,0.9)" }}>Early Bird</h3>
               <p className="text-xs font-bold text-purple-deep/80">
-                {earlyBirdUsed ? "Già riscattato oggi ✓" : "+50 Spark · +200 Coin · +1 Reveal"}
+                {earlyBirdUsed ? "Già riscattato oggi ✓" : "+50 Spark · +1 Reveal"}
               </p>
             </div>
             {!earlyBirdUsed

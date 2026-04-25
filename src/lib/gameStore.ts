@@ -90,6 +90,7 @@ interface GameState {
   activateVip: (days: number) => void;
   progressMission: (id: MissionId, amount?: number) => void;
   claimMission: (id: MissionId) => { ok: boolean; sparks: number; tickets: number };
+  resetForNewUser: (name?: string) => void;
 }
 
 const todayStr = () => new Date().toISOString().split("T")[0];
@@ -102,31 +103,31 @@ const initialMissions = Object.fromEntries(
 export const useGameStore = create<GameState>()(
   persist(
     (set, get) => ({
-      coins: 2830,
-      sparks: 124,
-      tickets: 8,
-      hearts: 3,
-      gems: 5,
+      coins: 0,
+      sparks: 0,
+      tickets: 0,
+      hearts: 0,
+      gems: 0,
       vip: false,
       vipExpiry: null,
       playerSeed: Math.floor(Math.random() * 1_000_000) + 1,
-      username: "GoldenPlayer",
-      avatar: "👑",
-      xp: 450,
-      level: 5,
-      bingosWon: 3,
-      revealsOpened: 7,
-      roundsPlayed: 12,
-      streak: 2,
+      username: "Nuovo Giocatore",
+      avatar: "👤",
+      xp: 0,
+      level: 1,
+      bingosWon: 0,
+      revealsOpened: 0,
+      roundsPlayed: 0,
+      streak: 0,
       lastClaimDate: null,
       dailyRevealUsed: false,
-      premiumRevealsLeft: 2,
+      premiumRevealsLeft: 0,
       earlyBirdClaimed: false,
       lastEarlyBirdDate: null,
       muted: false,
       musicMuted: true,
       missions: initialMissions,
-      rank: 248,
+      rank: 0,
       theme: "royale",
 
       addSparks: (n) => set((s) => ({ sparks: Math.max(0, s.sparks + n) })),
@@ -189,10 +190,6 @@ export const useGameStore = create<GameState>()(
 
       usePremiumReveal: () => {
         const s = get();
-        if (s.vip) {
-          // VIP users get free premium reveals, no cost
-          return true;
-        }
         if (s.premiumRevealsLeft > 0) {
           set((st) => ({ premiumRevealsLeft: Math.max(0, st.premiumRevealsLeft - 1) }));
           return true;
@@ -214,7 +211,6 @@ export const useGameStore = create<GameState>()(
           lastEarlyBirdDate: t,
           earlyBirdClaimed: true,
           sparks: st.sparks + 50,
-          coins: st.coins + 200,
           premiumRevealsLeft: st.premiumRevealsLeft + 1,
         }));
         return { ok: true };
@@ -252,7 +248,6 @@ export const useGameStore = create<GameState>()(
         set({
           vip: true,
           vipExpiry: expiry.toISOString(),
-          premiumRevealsLeft: get().premiumRevealsLeft + 5,
         });
       },
 
@@ -280,6 +275,34 @@ export const useGameStore = create<GameState>()(
         get().addXp(20);
         return { ok: true, sparks: cfg.reward_sparks, tickets: cfg.reward_tickets };
       },
+
+      resetForNewUser: (name) => set({
+        coins: 0,
+        sparks: 0,
+        tickets: 0,
+        hearts: 0,
+        gems: 0,
+        vip: false,
+        vipExpiry: null,
+        playerSeed: Math.floor(Math.random() * 1_000_000) + 1,
+        username: name?.trim() || "Nuovo Giocatore",
+        avatar: "👤",
+        xp: 0,
+        level: 1,
+        bingosWon: 0,
+        revealsOpened: 0,
+        roundsPlayed: 0,
+        streak: 0,
+        lastClaimDate: null,
+        dailyRevealUsed: false,
+        premiumRevealsLeft: 0,
+        earlyBirdClaimed: false,
+        lastEarlyBirdDate: null,
+        missions: Object.fromEntries(
+          MISSIONS_CONFIG.map((m) => [m.id, { progress: 0, claimed: false, resetDate: todayStr() }])
+        ) as Record<MissionId, MissionProgress>,
+        rank: 0,
+      }),
     }),
     {
       name: "golden-room-v5",

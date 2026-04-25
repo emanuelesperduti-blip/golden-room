@@ -40,7 +40,7 @@ function injectStyles() {
 interface Prize { symbol:string; img?:string; emoji:string; label:string; value:number; weight:number; color:string; }
 const PRIZES: Prize[] = [
   { symbol:"star",    img:lsStar,  emoji:"⭐", label:"+8 Spark",  value:8,  weight:40, color:"#fde047" },
-  { symbol:"coin",    img:lsCoins, emoji:"🪙", label:"+12 Spark", value:12, weight:28, color:"#fde68a" },
+  { symbol:"spark12", img:lsCoins, emoji:"⚡", label:"+12 Spark", value:12, weight:28, color:"#fde68a" },
   { symbol:"diamond", img:undefined, emoji:"💎", label:"+25 Spark", value:25, weight:22, color:"#67e8f9" },
   { symbol:"ruby",    img:undefined, emoji:"🔴", label:"+55 Spark", value:55, weight:10, color:"#fca5a5" },
 ];
@@ -78,7 +78,7 @@ function Counter({ target, color }:{ target:number; color:string }) {
   return <span style={{color,textShadow:`0 0 16px ${color}`}}>+{v}</span>;
 }
 
-const TICKS=["🔥 Luca_88 ha vinto 25 Spark!","⭐ Sara_XO sta grattando...","💎 GoldPlayer ha vinto!","🎰 462 persone oggi","🔥 Marco_VIP: 55 Spark!","⭐ Lucky_Bea: 3 stelle!","🪙 IlDiavolo: 12 Spark!"];
+const TICKS=["🔥 Luca_88 ha vinto 25 Spark!","⭐ Sara_XO sta grattando...","💎 GoldPlayer ha vinto!","🎰 462 persone oggi","🔥 Marco_VIP: 55 Spark!","⭐ Lucky_Bea: 3 stelle!","⚡ IlDiavolo: 12 Spark!"];
 function Ticker() {
   const items=[...TICKS,...TICKS];
   return (
@@ -155,11 +155,21 @@ function ScratchCell({ prize,revealed,onReveal,disabled,isWinner,isNearWin,onScr
     const W=canvas.width, H=canvas.height;
     ctx.globalCompositeOperation="source-over";
     ctx.clearRect(0,0,W,H);
+    const g0=ctx.createLinearGradient(0,0,W,H);
+    g0.addColorStop(0,"#f8fafc"); g0.addColorStop(0.32,"#aeb7c3"); g0.addColorStop(0.55,"#eef2f7"); g0.addColorStop(1,"#8f9baa");
+    ctx.fillStyle=g0; ctx.fillRect(0,0,W,H);
+    ctx.fillStyle="rgba(30,45,70,0.72)";
+    ctx.font="bold "+Math.round(W*0.24)+"px system-ui";
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText("?",W/2,H/2+2);
     const img=new window.Image();
     img.src=lsScratch;
     img.onload=()=>{
       ctx.globalCompositeOperation="source-over";
       ctx.clearRect(0,0,W,H);
+      const g=ctx.createLinearGradient(0,0,W,H);
+      g.addColorStop(0,"#f8fafc"); g.addColorStop(0.32,"#aeb7c3"); g.addColorStop(0.55,"#eef2f7"); g.addColorStop(1,"#8f9baa");
+      ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
       ctx.drawImage(img,0,0,W,H);
       ctx.fillStyle="rgba(30,45,70,0.62)";
       ctx.font=`bold ${Math.round(W*0.24)}px system-ui`;
@@ -280,7 +290,7 @@ function ScratchCell({ prize,revealed,onReveal,disabled,isWinner,isNearWin,onScr
       </div>
       <canvas ref={canvasRef} width={120} height={120}
         className="absolute inset-0 h-full w-full touch-none"
-        style={{borderRadius:12,cursor:disabled||revealed?"default":"crosshair",display:revealed?"none":"block",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none"}}
+        style={{borderRadius:12,cursor:disabled||revealed?"default":"crosshair",display:revealed?"none":"block",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none",background:"linear-gradient(135deg,#f8fafc,#aeb7c3 35%,#eef2f7 55%,#8f9baa)",backgroundSize:"cover",backgroundPosition:"center"}}
         onPointerDown={startDraw}
         onPointerMove={moveDraw}
         onPointerUp={endDraw}
@@ -427,11 +437,8 @@ export function LuckyStrikeModal({ open,onClose }:{ open:boolean; onClose:()=>vo
             background:"radial-gradient(circle at 40% 35%,#2e1268,#180840)",
             border:"2px solid rgba(130,70,220,0.45)",
           }}>
-            <div className="absolute inset-0 flex items-center justify-center opacity-30">
-              <PrizeIcon prize={p} size={28}/>
-            </div>
             <div className="absolute inset-0 overflow-hidden" style={{borderRadius:12}}>
-              <div style={{position:"absolute",inset:0,backgroundImage:`url(${lsScratch})`,backgroundSize:"cover",backgroundPosition:"center",display:"flex",alignItems:"center",justifyContent:"center"}}>
+              <div style={{position:"absolute",inset:0,backgroundColor:"#cbd5e1",backgroundImage:"linear-gradient(135deg,#f8fafc,#aeb7c3 35%,#eef2f7 55%,#8f9baa), url("+lsScratch+")",backgroundSize:"cover",backgroundPosition:"center",display:"flex",alignItems:"center",justifyContent:"center"}}>
                 <span style={{fontSize:"clamp(18px,3svh,26px)",fontWeight:900,color:"rgba(45,60,85,0.65)"}}>?</span>
               </div>
             </div>
