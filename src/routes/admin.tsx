@@ -459,7 +459,7 @@ function AdminPage() {
 }
 
 function EmailSettingsTab({ addActivityLog }: { addActivityLog: (log: any) => void }) {
-  const [fromEmail, setFromEmail] = useState(() => localStorage.getItem("gamespark-sendgrid-from-email") || "noreply@gamespark.app");
+  const [fromEmail, setFromEmail] = useState(() => localStorage.getItem("gamespark-sendgrid-from-email") || "noreply@gamespark.it");
   const [fromName, setFromName] = useState(() => localStorage.getItem("gamespark-sendgrid-from-name") || "Golden Room");
   const [apiKey, setApiKey] = useState(() => localStorage.getItem("gamespark-sendgrid-api-key") || "");
   const [templateId, setTemplateId] = useState(() => localStorage.getItem("gamespark-sendgrid-template-id") || "");

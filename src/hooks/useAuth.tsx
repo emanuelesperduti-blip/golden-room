@@ -130,8 +130,8 @@ async function sendCustomConfirmationEmail(email: string, name: string) {
       body: JSON.stringify({
         email,
         name,
-        redirectTo: window.location.origin + "/auth",
-        fromEmail: window.localStorage.getItem("gamespark-sendgrid-from-email") || "noreply@gamespark.app",
+        redirectTo: "https://gamespark.it/auth",
+        fromEmail: window.localStorage.getItem("gamespark-sendgrid-from-email") || "noreply@gamespark.it",
         fromName: window.localStorage.getItem("gamespark-sendgrid-from-name") || "Golden Room",
         templateId: window.localStorage.getItem("gamespark-sendgrid-template-id") || undefined,
         sendGridApiKey: window.localStorage.getItem("gamespark-sendgrid-api-key") || undefined,
@@ -198,7 +198,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!sb) return { error: "Accesso Google disponibile quando colleghi Supabase." };
       const { error } = await sb.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: `${window.location.origin}/` },
+        options: { redirectTo: "https://gamespark.it/" },
       });
       return { error: error?.message };
     } catch (e: any) {
@@ -212,7 +212,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!sb) return { error: "Accesso Facebook disponibile quando colleghi Supabase." };
       const { error } = await sb.auth.signInWithOAuth({
         provider: "facebook",
-        options: { redirectTo: `${window.location.origin}/` },
+        options: { redirectTo: "https://gamespark.it/" },
       });
       return { error: error?.message };
     } catch (e: any) {
@@ -256,7 +256,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password: normalizedPassword,
           options: {
             data: { full_name: normalizedName },
-            emailRedirectTo: typeof window !== "undefined" ? window.location.origin + "/auth" : undefined,
+            emailRedirectTo: "https://gamespark.it/auth",
           },
         });
         if (!error) {

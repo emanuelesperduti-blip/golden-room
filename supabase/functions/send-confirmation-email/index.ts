@@ -14,16 +14,18 @@ serve(async (req) => {
     const email = String(body.email || "").trim().toLowerCase();
     const name = String(body.name || "Giocatore").trim();
     const redirectTo = String(body.redirectTo || "").trim();
-    const fromEmail = String(body.fromEmail || Deno.env.get("SENDGRID_FROM_EMAIL") || "noreply@gamespark.app").trim();
-    const fromName = String(body.fromName || Deno.env.get("SENDGRID_FROM_NAME") || "Golden Room").trim();
+    const appUrl = String(Deno.env.get("APP_URL") || "https://gamespark.it").trim().replace(/\/$/, "");
+    const fromEmail = String(body.fromEmail || Deno.env.get("SENDGRID_FROM_EMAIL") || "noreply@gamespark.it").trim();
+    const fromName = String(body.fromName || Deno.env.get("SENDGRID_FROM_NAME") || "GameSpark").trim();
     const templateId = String(body.templateId || Deno.env.get("SENDGRID_CONFIRM_TEMPLATE_ID") || "").trim();
 
-    // Preferisci sempre i secret server-side. Il body fallback serve solo per prototipo/admin locale.
     const sendGridApiKey = String(Deno.env.get("SENDGRID_API_KEY") || body.sendGridApiKey || "").trim();
     if (!email.includes("@")) return Response.json({ ok: false, error: "Email non valida" }, { status: 400, headers: corsHeaders });
     if (!sendGridApiKey) return Response.json({ ok: false, error: "SENDGRID_API_KEY mancante" }, { status: 400, headers: corsHeaders });
 
-    const confirmationUrl = redirectTo || `${new URL(req.url).origin}/auth`;
+    // Non fidarti mai di redirect provenienti da preview/Lovable: accetta solo gamespark.it.
+    const confirmationUrl = redirectTo.startsWith("https://gamespark.it") ? redirectTo : `${appUrl}/auth`;
+
     const payload: Record<string, unknown> = {
       personalizations: [{
         to: [{ email, name }],
@@ -35,10 +37,10 @@ serve(async (req) => {
     if (templateId) {
       payload.template_id = templateId;
     } else {
-      payload.subject = "Conferma la tua email — Golden Room";
+      payload.subject = "Conferma la tua email - GameSpark";
       payload.content = [{
         type: "text/html",
-        value: `<div style="font-family:Arial,sans-serif;background:#160827;color:#fff;padding:24px;border-radius:18px"><h1>Benvenuto ${name}</h1><p>Conferma la tua email per entrare in Golden Room.</p><p><a href="${confirmationUrl}" style="display:inline-block;background:#f5b400;color:#24071d;padding:12px 18px;border-radius:999px;font-weight:800;text-decoration:none">Conferma email</a></p></div>`,
+        value: `<div style="font-family:Arial,sans-serif;background:#160827;color:#fff;padding:24px;border-radius:18px"><h1>Benvenuto ${name}</h1><p>Conferma la tua email per entrare in GameSpark.</p><p><a href="${confirmationUrl}" style="display:inline-block;background:#f5b400;color:#24071d;padding:12px 18px;border-radius:999px;font-weight:800;text-decoration:none">Conferma email</a></p></div>`,
       }];
     }
 
