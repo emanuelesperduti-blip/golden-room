@@ -25,7 +25,7 @@ export interface AuthUser {
   email: string | null;
   name: string | null;
   avatar_url: string | null;
-  provider: "google" | "facebook" | "email" | "anonymous";
+  provider: "google" | "email" | "anonymous";
 }
 
 interface LocalAccount {
@@ -41,7 +41,6 @@ interface AuthContextType {
   session: Session | null;
   loading: boolean;
   signInWithGoogle: () => Promise<{ error?: string }>;
-  signInWithFacebook: () => Promise<{ error?: string }>;
   signInWithEmail: (email: string, password: string) => Promise<{ error?: string }>;
   signUpWithEmail: (email: string, password: string, name: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
@@ -52,7 +51,6 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   loading: false,
   signInWithGoogle: async () => ({}),
-  signInWithFacebook: async () => ({}),
   signInWithEmail: async () => ({}),
   signUpWithEmail: async () => ({}),
   signOut: async () => {},
@@ -208,20 +206,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }
 
-  async function signInWithFacebook() {
-    try {
-      const sb = await getSupabase();
-      if (!sb) return { error: "Accesso Facebook disponibile quando colleghi Supabase." };
-      const { error } = await sb.auth.signInWithOAuth({
-        provider: "facebook",
-        options: { redirectTo: `${APP_ORIGIN}/` },
-      });
-      return { error: error?.message };
-    } catch (e: any) {
-      return { error: e.message || "Errore durante l'accesso con Facebook." };
-    }
-  }
-
   async function signInWithEmail(email: string, password: string) {
     const normalizedEmail = email.trim().toLowerCase();
     const normalizedPassword = password.trim();
@@ -315,7 +299,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ user, session, loading, signInWithGoogle, signInWithFacebook, signInWithEmail, signUpWithEmail, signOut }}
+      value={{ user, session, loading, signInWithGoogle, signInWithEmail, signUpWithEmail, signOut }}
     >
       {children}
     </AuthContext.Provider>
