@@ -17,6 +17,8 @@ async function getSupabase() {
 
 const LOCAL_USERS_KEY = "gamespark-local-auth-users";
 const LOCAL_SESSION_KEY = "gamespark-local-auth-session";
+const APP_ORIGIN = "https://gamespark.it";
+const AUTH_REDIRECT_URL = `${APP_ORIGIN}/auth`;
 
 export interface AuthUser {
   id: string;
@@ -130,8 +132,8 @@ async function sendCustomConfirmationEmail(email: string, name: string) {
       body: JSON.stringify({
         email,
         name,
-        redirectTo: "https://gamespark.it/auth",
-        fromEmail: window.localStorage.getItem("gamespark-sendgrid-from-email") || "noreply@gamespark.it",
+        redirectTo: AUTH_REDIRECT_URL,
+        fromEmail: window.localStorage.getItem("gamespark-sendgrid-from-email") || "noreply@gamespark.app",
         fromName: window.localStorage.getItem("gamespark-sendgrid-from-name") || "Golden Room",
         templateId: window.localStorage.getItem("gamespark-sendgrid-template-id") || undefined,
         sendGridApiKey: window.localStorage.getItem("gamespark-sendgrid-api-key") || undefined,
@@ -198,7 +200,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!sb) return { error: "Accesso Google disponibile quando colleghi Supabase." };
       const { error } = await sb.auth.signInWithOAuth({
         provider: "google",
-        options: { redirectTo: "https://gamespark.it/" },
+        options: { redirectTo: `${APP_ORIGIN}/` },
       });
       return { error: error?.message };
     } catch (e: any) {
@@ -212,7 +214,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (!sb) return { error: "Accesso Facebook disponibile quando colleghi Supabase." };
       const { error } = await sb.auth.signInWithOAuth({
         provider: "facebook",
-        options: { redirectTo: "https://gamespark.it/" },
+        options: { redirectTo: `${APP_ORIGIN}/` },
       });
       return { error: error?.message };
     } catch (e: any) {
@@ -256,7 +258,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password: normalizedPassword,
           options: {
             data: { full_name: normalizedName },
-            emailRedirectTo: "https://gamespark.it/auth",
+            emailRedirectTo: AUTH_REDIRECT_URL,
           },
         });
         if (!error) {
