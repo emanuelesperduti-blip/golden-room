@@ -366,14 +366,14 @@ function RoomCard({ room, delay, index }: { room: RoomConfig; delay: number; ind
               <h3 className="text-stroke-game mt-1 truncate text-lg font-extrabold leading-tight text-white">{room.name}</h3>
               <p className="truncate text-[11px] font-bold text-white/80">{room.subtitle}</p>
 
-              <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[11px] font-extrabold text-white/90">
+              <div className="mt-1.5 flex flex-wrap items-center gap-1 text-[10px] font-extrabold text-white/90 sm:text-[11px]">
                 <span className="flex items-center gap-0.5 rounded-full bg-black/30 px-1.5 py-0.5">
                   <Users className="h-3 w-3" /> {players} in sala
                 </span>
-                <span className="flex items-center gap-0.5 rounded-full bg-black/30 px-1.5 py-0.5">
+                <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-black/30 px-2 py-0.5 whitespace-nowrap">
                   <Ticket className="h-3 w-3" /> {canReserve}
                 </span>
-                <span className="flex items-center gap-0.5 rounded-full bg-black/30 px-1.5 py-0.5">
+                <span className="flex min-w-0 shrink-0 items-center gap-0.5 rounded-full bg-black/30 px-2 py-0.5 whitespace-nowrap leading-none">
                   <Flame className="h-3 w-3 text-gold" /> +{room.sparkReward}
                   <img src={sparkIcon} alt="" className="h-3 w-3" width={12} height={12} />
                   {room.ticketReward > 0 && (
