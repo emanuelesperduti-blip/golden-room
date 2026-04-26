@@ -17,10 +17,8 @@ import { useGameStore, MISSIONS_CONFIG } from "@/lib/gameStore";
 import { useAuth } from "@/hooks/useAuth";
 import { useViewerGameState } from "@/hooks/useViewerGameState";
 import { BOTS, recentBotWins } from "@/lib/bots";
-import { formatRealWin, useRecentWinHistory } from "@/lib/winHistory";
-import { ROOMS as BOT_ROOMS, getRoom } from "@/lib/rooms";
+import { ROOMS as BOT_ROOMS } from "@/lib/rooms";
 import { useAudio } from "@/hooks/useAudio";
-import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/")(
   {
@@ -50,189 +48,37 @@ function HomePage() {
   const today = new Date().toISOString().split("T")[0];
   const claimedToday = lastClaimDate === today;
   const earlyBirdUsed = lastEarlyBirdDate === today;
-  const recommendedRoom = getRoom("night-rush");
-
-  useEffect(() => {
-    if (!user?.id) return;
-    let cancelled = false;
-
-    async function loadDailyState() {
-      try {
-        const { data } = await (supabase as any)
-          .from("gamespark_users")
-          .select("sparks,tickets,streak,last_claim_date,daily_reveal_used,premium_reveals_left,last_early_bird_date,early_bird_claimed,vip,vip_expiry")
-          .eq("id", user.id)
-          .maybeSingle();
-
-        if (cancelled || !data) return;
-
-        useGameStore.setState((current) => ({
-          sparks: Number(data.sparks ?? current.sparks),
-          tickets: Number(data.tickets ?? current.tickets),
-          streak: Number(data.streak ?? current.streak),
-          lastClaimDate: data.last_claim_date ?? current.lastClaimDate,
-          dailyRevealUsed: Boolean(data.daily_reveal_used ?? current.dailyRevealUsed),
-          premiumRevealsLeft: Number(data.premium_reveals_left ?? current.premiumRevealsLeft),
-          lastEarlyBirdDate: data.last_early_bird_date ?? current.lastEarlyBirdDate,
-          earlyBirdClaimed: Boolean(data.early_bird_claimed ?? current.earlyBirdClaimed),
-          vip: Boolean(data.vip ?? current.vip),
-          vipExpiry: data.vip_expiry ?? current.vipExpiry,
-        }));
-      } catch (err) {
-        console.warn("Daily state sync failed", err);
-      }
-    }
-
-    loadDailyState();
-    return () => { cancelled = true; };
-  }, [user?.id]);
 
   const xpInLevel = xp % 100;
   const xpPct = xpInLevel;
+  const recommendedRoom = BOT_ROOMS.find((room) => room.id === "night-rush") ?? BOT_ROOMS[0];
 
   function showToast(msg: string) {
     setToast(msg);
     setTimeout(() => setToast(null), 2800);
   }
 
-  async function handleDailyClaim() {
-    if (!user?.id) {
-      const result = dailyClaim();
-      if (!result.ok) {
-        sfx("error");
-        showToast("Ricompensa già riscattata oggi!");
-        return;
-      }
-      sfx("claim");
-      confetti({ particleCount: 160, spread: 90, origin: { y: 0.4 }, colors: ["#f5b400", "#ff3da6", "#7c3aed"] });
-      showToast(result.streakBonus
-        ? `🎉 Streak ${result.streak}! +${result.sparks} Spark +${result.tickets} Ticket BONUS!`
-        : `🔥 Streak ${result.streak} · +${result.sparks} Spark +${result.tickets} Ticket`
-      );
+  function handleDailyClaim() {
+    const result = dailyClaim();
+    if (!result.ok) {
+      sfx("error");
+      showToast("Ricompensa già riscattata oggi!");
       return;
     }
-
-    try {
-      const { data: profile } = await (supabase as any)
-        .from("gamespark_users")
-        .select("sparks,tickets,streak,last_claim_date")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      const { error: claimError } = await (supabase as any)
-        .from("gamespark_daily_claims")
-        .insert({ user_id: user.id, claim_date: today, claim_type: "daily_bonus" });
-
-      if (claimError) {
-        sfx("error");
-        showToast("Ricompensa già riscattata oggi!");
-        return;
-      }
-
-      const yesterday = new Date();
-      yesterday.setDate(yesterday.getDate() - 1);
-      const yesterdayStr = yesterday.toISOString().split("T")[0];
-      const dbLastClaim = profile?.last_claim_date ?? null;
-      const dbStreak = Number(profile?.streak ?? 0);
-      const newStreak = dbLastClaim === yesterdayStr ? dbStreak + 1 : 1;
-      const baseSparks = 6 + newStreak * 2;
-      const baseTickets = newStreak >= 7 ? 2 : newStreak >= 5 ? 1 : 0;
-      const streakBonus = newStreak % 7 === 0;
-      const bonusSparks = streakBonus ? 20 : 0;
-      const sparksWon = baseSparks + bonusSparks;
-      const newSparks = Number(profile?.sparks ?? useGameStore.getState().sparks) + sparksWon;
-      const newTickets = Number(profile?.tickets ?? useGameStore.getState().tickets) + baseTickets;
-
-      await (supabase as any)
-        .from("gamespark_users")
-        .update({
-          sparks: newSparks,
-          tickets: newTickets,
-          streak: newStreak,
-          last_claim_date: today,
-          daily_reveal_used: false,
-          early_bird_claimed: false,
-        })
-        .eq("id", user.id);
-
-      useGameStore.setState({
-        sparks: newSparks,
-        tickets: newTickets,
-        streak: newStreak,
-        lastClaimDate: today,
-        dailyRevealUsed: false,
-        earlyBirdClaimed: false,
-      });
-      progressMission("streak_3", newStreak);
-
-      sfx("claim");
-      confetti({ particleCount: 160, spread: 90, origin: { y: 0.4 }, colors: ["#f5b400", "#ff3da6", "#7c3aed"] });
-      showToast(streakBonus
-        ? `🎉 Streak ${newStreak}! +${sparksWon} Spark +${baseTickets} Ticket BONUS!`
-        : `🔥 Streak ${newStreak} · +${sparksWon} Spark +${baseTickets} Ticket`
-      );
-    } catch (err) {
-      console.error("Daily claim failed", err);
-      sfx("error");
-      showToast("Errore durante il claim. Riprova.");
-    }
+    sfx("claim");
+    confetti({ particleCount: 160, spread: 90, origin: { y: 0.4 }, colors: ["#f5b400", "#ff3da6", "#7c3aed"] });
+    showToast(result.streakBonus
+      ? `🎉 Streak ${result.streak}! +${result.sparks} Spark +${result.tickets} Ticket BONUS!`
+      : `🔥 Streak ${result.streak} · +${result.sparks} Spark +${result.tickets} Ticket`
+    );
   }
 
-  async function handleEarlyBird() {
-    if (!user?.id) {
-      const result = claimEarlyBird();
-      if (!result.ok) { sfx("error"); showToast("Early Bird già riscattato oggi!"); return; }
-      sfx("claim");
-      confetti({ particleCount: 100, spread: 70, origin: { y: 0.5 }, colors: ["#f5b400", "#ff3da6"] });
-      showToast("⚡ Early Bird! +50 Spark +1 Reveal Premium");
-      return;
-    }
-
-    try {
-      const { data: profile } = await (supabase as any)
-        .from("gamespark_users")
-        .select("sparks,premium_reveals_left")
-        .eq("id", user.id)
-        .maybeSingle();
-
-      const { error: claimError } = await (supabase as any)
-        .from("gamespark_daily_claims")
-        .insert({ user_id: user.id, claim_date: today, claim_type: "early_bird" });
-
-      if (claimError) {
-        sfx("error");
-        showToast("Early Bird già riscattato oggi!");
-        return;
-      }
-
-      const newSparks = Number(profile?.sparks ?? useGameStore.getState().sparks) + 50;
-      const newPremiumRevealsLeft = Number(profile?.premium_reveals_left ?? useGameStore.getState().premiumRevealsLeft) + 1;
-
-      await (supabase as any)
-        .from("gamespark_users")
-        .update({
-          sparks: newSparks,
-          premium_reveals_left: newPremiumRevealsLeft,
-          last_early_bird_date: today,
-          early_bird_claimed: true,
-        })
-        .eq("id", user.id);
-
-      useGameStore.setState({
-        sparks: newSparks,
-        premiumRevealsLeft: newPremiumRevealsLeft,
-        lastEarlyBirdDate: today,
-        earlyBirdClaimed: true,
-      });
-
-      sfx("claim");
-      confetti({ particleCount: 100, spread: 70, origin: { y: 0.5 }, colors: ["#f5b400", "#ff3da6"] });
-      showToast("⚡ Early Bird! +50 Spark +1 Reveal Premium");
-    } catch (err) {
-      console.error("Early bird claim failed", err);
-      sfx("error");
-      showToast("Errore durante il claim. Riprova.");
-    }
+  function handleEarlyBird() {
+    const result = claimEarlyBird();
+    if (!result.ok) { sfx("error"); showToast("Early Bird già riscattato oggi!"); return; }
+    sfx("claim");
+    confetti({ particleCount: 100, spread: 70, origin: { y: 0.5 }, colors: ["#f5b400", "#ff3da6"] });
+    showToast("⚡ Early Bird! +50 Spark +1 Reveal Premium");
   }
 
   // Shop items now go through proper purchase flow in /shop
@@ -420,20 +266,21 @@ function HomePage() {
                   <Badge variant="hot">HOT</Badge>
                 </div>
                 <h3 className="text-stroke-game mt-1 text-2xl font-extrabold leading-tight text-white">
-                  {recommendedRoom.name}
+                  Night Bingo Rush
                 </h3>
-                <p className="text-sm font-bold text-white/80">{recommendedRoom.subtitle}</p>
+                <p className="text-sm font-bold text-white/80">Bingo veloce e divertente!</p>
               </div>
             </div>
-            <div className="mt-3 flex items-center gap-2">
-              <div className="flex-1 rounded-2xl bg-gold-shine px-3 py-2 text-center shadow-button-gold">
-                <span className="text-stroke-thin text-sm font-extrabold text-purple-deep">
-                  <Ticket className="mr-1 inline h-4 w-4" /> {recommendedRoom.ticketCost === 0 ? "Gratis" : `${recommendedRoom.ticketCost} Ticket`}
+            <div className="mt-3 flex items-stretch gap-2">
+              <div className="flex h-9 w-[96px] shrink-0 items-center justify-center rounded-2xl bg-gold-shine px-2 shadow-button-gold">
+                <span className="text-stroke-thin flex items-center gap-1 whitespace-nowrap text-xs font-extrabold leading-none text-purple-deep">
+                  <Ticket className="h-3.5 w-3.5 shrink-0" /> {recommendedRoom.ticketCost === 0 ? "Gratis" : `${recommendedRoom.ticketCost} Ticket`}
                 </span>
               </div>
-              <div className="flex-1 rounded-2xl bg-magenta-grad px-3 py-2 text-center shadow-button-game">
-                <span className="text-stroke-thin text-sm font-extrabold text-white">
-                  <Flame className="mr-1 inline h-4 w-4" /> +{recommendedRoom.sparkReward} Spark{recommendedRoom.ticketReward > 0 ? ` · +${recommendedRoom.ticketReward} Ticket` : ""}
+              <div className="flex h-9 flex-1 overflow-hidden items-center justify-center rounded-2xl bg-magenta-grad px-2 shadow-button-game">
+                <span className="text-stroke-thin flex min-w-0 items-center gap-1 whitespace-nowrap text-xs font-extrabold leading-none text-white overflow-hidden">
+                  <Flame className="h-3.5 w-3.5 shrink-0" />
+                  <span className="truncate">+{recommendedRoom.sparkReward} Spark{recommendedRoom.ticketReward > 0 ? ` · +${recommendedRoom.ticketReward} Ticket` : ""}</span>
                 </span>
               </div>
             </div>
@@ -527,7 +374,6 @@ function HomePage() {
 
 // ─── Community Feed ───────────────────────────────────────────
 function CommunityFeed() {
-  const realWins = useRecentWinHistory(5);
   const ROOMS_NAMES = BOT_ROOMS.map((r) => r.name);
   const [items, setItems] = useState(() =>
     BOTS.slice(0, 3).map((b, i) => ({
@@ -561,18 +407,7 @@ function CommunityFeed() {
 
   return (
     <div className="space-y-0 divide-y divide-white/5">
-      {realWins.map((win) => (
-        <div key={win.id} className="flex items-center gap-2.5 px-3 py-2.5">
-          <span className="text-xl shrink-0">🏆</span>
-          <div className="min-w-0 flex-1">
-            <span className="text-xs font-extrabold text-gold">{win.username}</span>
-            <span className="text-xs text-white/50"> ha vinto </span>
-            <span className="text-xs font-bold text-white/80">{win.prize_label || formatRealWin(win)}</span>
-          </div>
-          <span className="text-[10px] text-white/30 shrink-0">live</span>
-        </div>
-      ))}
-      {items.slice(0, Math.max(0, 5 - realWins.length)).map((item) => (
+      {items.map((item) => (
         <div key={item.id} className="flex items-center gap-2.5 px-3 py-2.5">
           <span className="text-xl shrink-0">{item.bot.avatar}</span>
           <div className="min-w-0 flex-1">
