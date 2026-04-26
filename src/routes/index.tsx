@@ -17,6 +17,7 @@ import { useGameStore, MISSIONS_CONFIG } from "@/lib/gameStore";
 import { useAuth } from "@/hooks/useAuth";
 import { useViewerGameState } from "@/hooks/useViewerGameState";
 import { BOTS, recentBotWins } from "@/lib/bots";
+import { formatRealWin, useRecentWinHistory } from "@/lib/winHistory";
 import { ROOMS as BOT_ROOMS } from "@/lib/rooms";
 import { useAudio } from "@/hooks/useAudio";
 import { supabase } from "@/integrations/supabase/client";
@@ -525,6 +526,7 @@ function HomePage() {
 
 // ─── Community Feed ───────────────────────────────────────────
 function CommunityFeed() {
+  const realWins = useRecentWinHistory(5);
   const ROOMS_NAMES = BOT_ROOMS.map((r) => r.name);
   const [items, setItems] = useState(() =>
     BOTS.slice(0, 3).map((b, i) => ({
@@ -558,7 +560,18 @@ function CommunityFeed() {
 
   return (
     <div className="space-y-0 divide-y divide-white/5">
-      {items.map((item) => (
+      {realWins.map((win) => (
+        <div key={win.id} className="flex items-center gap-2.5 px-3 py-2.5">
+          <span className="text-xl shrink-0">🏆</span>
+          <div className="min-w-0 flex-1">
+            <span className="text-xs font-extrabold text-gold">{win.username}</span>
+            <span className="text-xs text-white/50"> ha vinto </span>
+            <span className="text-xs font-bold text-white/80">{win.prize_label || formatRealWin(win)}</span>
+          </div>
+          <span className="text-[10px] text-white/30 shrink-0">live</span>
+        </div>
+      ))}
+      {items.slice(0, Math.max(0, 5 - realWins.length)).map((item) => (
         <div key={item.id} className="flex items-center gap-2.5 px-3 py-2.5">
           <span className="text-xl shrink-0">{item.bot.avatar}</span>
           <div className="min-w-0 flex-1">

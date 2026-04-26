@@ -7,6 +7,9 @@ import { MobileShell } from "@/components/game/MobileShell";
 import { GameButton } from "@/components/game/GameButton";
 import sparkIcon from "@/assets/icon-spark.png";
 import { useGameStore } from "@/lib/gameStore";
+import { useAuth } from "@/hooks/useAuth";
+import { useViewerGameState } from "@/hooks/useViewerGameState";
+import { recordRealWin } from "@/lib/winHistory";
 import { useAudio } from "@/hooks/useAudio";
 
 export const Route = createFileRoute("/scratch")({
@@ -227,6 +230,8 @@ function ScratchCell({ prize, revealed, onReveal, disabled }: ScratchCellProps) 
 
 // Main Page
 function ScratchPage() {
+  const { user } = useAuth();
+  const { username } = useViewerGameState();
   const { sfx } = useAudio();
   const sparks = useGameStore((s) => s.sparks);
   const tickets = useGameStore((s) => s.tickets);
@@ -242,6 +247,7 @@ function ScratchPage() {
   const [phase, setPhase] = useState<"select" | "playing" | "result">("select");
   const [toast, setToast] = useState<string | null>(null);
   const [freeUsed, setFreeUsed] = useState(false);
+  const winRecordedRef = useRef(false);
 
   const cfg = CARD_CONFIGS.find((c) => c.tier === selectedTier)!;
 
@@ -262,6 +268,7 @@ function ScratchPage() {
     setGrid(newGrid);
     setRevealed(new Array(9).fill(false));
     setWinner(null);
+    winRecordedRef.current = false;
     setPhase("playing");
   }
 
@@ -282,6 +289,7 @@ function ScratchPage() {
         // Apply reward
         if (w.valueType === "spark") addSparks(w.value);
         else if (w.valueType === "ticket") addTickets(w.value);
+        if (!winRecordedRef.current) { winRecordedRef.current = true; void recordRealWin({ user, username, roomId: "scratch", roomName: "Gratta e Vinci", gameType: "scratch", prizeLabel: w.label, sparkReward: w.valueType === "spark" ? w.value : 0, ticketReward: w.valueType === "ticket" ? w.value : 0 }); }
       }
     }
     if (next.every(Boolean)) setPhase("result");
@@ -299,6 +307,7 @@ function ScratchPage() {
       confetti({ particleCount: 180, spread: 90, origin: { y: 0.45 }, colors: ["#f5b400", "#ff3da6", "#7c3aed"] });
       if (w.valueType === "spark") addSparks(w.value);
       else if (w.valueType === "ticket") addTickets(w.value);
+        if (!winRecordedRef.current) { winRecordedRef.current = true; void recordRealWin({ user, username, roomId: "scratch", roomName: "Gratta e Vinci", gameType: "scratch", prizeLabel: w.label, sparkReward: w.valueType === "spark" ? w.value : 0, ticketReward: w.valueType === "ticket" ? w.value : 0 }); }
     }
     setPhase("result");
   }
@@ -307,6 +316,7 @@ function ScratchPage() {
     setGrid(null);
     setRevealed([]);
     setWinner(null);
+    winRecordedRef.current = false;
     setPhase("select");
   }
 

@@ -9,6 +9,7 @@ import { ROOMS, getRoomTimeline, type RoomConfig } from "@/lib/rooms";
 import { useAudio } from "@/hooks/useAudio";
 import { useGameStore } from "@/lib/gameStore";
 import { recentBotWins, BOTS } from "@/lib/bots";
+import { formatRealWin, useRecentWinHistory } from "@/lib/winHistory";
 import { getControlledRoomPopulation, getBotConfigForRoom } from "@/lib/admin";
 import { LuckyStrikeModal } from "@/components/game/LuckyStrikeModal";
 import lsFab from "@/assets/ls-fab.png";
@@ -33,6 +34,7 @@ interface ActivityItem {
 let activityId = 0;
 
 function LobbyPage() {
+  const realWins = useRecentWinHistory(6);
   const progressMission = useGameStore((s) => s.progressMission);
   const [now, setNow] = useState(() => Date.now());
   const [luckyOpen, setLuckyOpen] = useState(false);
@@ -111,7 +113,13 @@ function LobbyPage() {
         </div>
         <div className="max-h-24 space-y-1.5 overflow-hidden">
           <AnimatePresence initial={false}>
-            {activity.map((item) => (
+            {realWins.map((win) => (
+              <motion.div key={win.id} initial={{ x: -20, opacity: 0 }} animate={{ x: 0, opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs font-bold text-white/70">
+                <span className="shrink-0 text-base">🏆</span>
+                <span className="truncate"><span className="text-gold">{win.username}</span> ha vinto {win.prize_label || formatRealWin(win)}</span>
+              </motion.div>
+            ))}
+            {activity.slice(0, Math.max(0, 6 - realWins.length)).map((item) => (
               <motion.div
                 key={item.id}
                 initial={{ x: -20, opacity: 0 }}
@@ -287,6 +295,7 @@ function LobbyPage() {
 }
 
 function RoomCard({ room, delay, index }: { room: RoomConfig; delay: number; index: number }) {
+  const roomRealWins = useRecentWinHistory(1, room.id);
   const { sfx } = useAudio();
   const progressMission = useGameStore((s) => s.progressMission);
   const [now, setNow] = useState(() => Date.now());
@@ -394,7 +403,7 @@ function RoomCard({ room, delay, index }: { room: RoomConfig; delay: number; ind
                 {timeline.phase === "finished" && (
                   <>
                     <Trophy className="mr-0.5 inline h-3 w-3 text-gold" />
-                    {recentWin}
+                    {roomRealWins[0] ? formatRealWin(roomRealWins[0]) : recentWin}
                   </>
                 )}
               </div>

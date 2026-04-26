@@ -24,10 +24,10 @@ import { useGameStore } from "@/lib/gameStore";
 import { useAudio } from "@/hooks/useAudio";
 import { setAuthRedirect } from "@/lib/authRedirect";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
 import { useViewerGameState } from "@/hooks/useViewerGameState";
 import { BOTS, BotChatEngine } from "@/lib/bots";
 import { getBotConfigForRoom } from "@/lib/admin";
+import { formatRealWin, recordRealWin, useRecentWinHistory } from "@/lib/winHistory";
 
 const searchSchema = z.object({ roomId: z.string().optional() });
 
@@ -250,15 +250,6 @@ function BingoPage() {
   const { sfx, speakNumber, startMusic, stopMusic, stopAll } = useAudio();
   const { user } = useAuth();
 
-  // Guard: se la room non esiste o roomId mancante, redirect alla home
-  useEffect(() => {
-    if (!room) {
-      navigate({ to: "/" });
-    }
-  }, [room, navigate]);
-
-  if (!room) return null;
-
   const playerSeed = useGameStore((s) => s.playerSeed);
   const { username, tickets } = useViewerGameState();
   const musicMuted = useGameStore((s) => s.musicMuted);
@@ -305,6 +296,7 @@ function BingoPage() {
   const isGuest = !user;
   const storageKey = useMemo(() => getBingoStorageKey(room.id, user?.id ?? null), [room.id, user?.id]);
   const botConfig = useMemo(() => getBotConfigForRoom(room.id), [room.id]);
+  const roomRealWins = useRecentWinHistory(5, room.id);
   const botCount = botConfig.enabled ? botConfig.botCount : 0;
 
   const drawOrder = useMemo(() => drawOrderForRound(room, currentRoundIndex), [room, currentRoundIndex]);
@@ -525,64 +517,18 @@ function BingoPage() {
   }, [botConfig.enabled, botConfig.chatPace, botConfig.reactionSpeed, botCount]);
 
   useEffect(() => {
-    if (isGuest || !user?.id) {
+    if (isGuest) {
       setPurchasedCards([]);
       return;
     }
-
-    let cancelled = false;
-    async function loadOnlineCards() {
-      const { data, error } = await (supabase as any)
-        .from("gamespark_bingo_entries")
-        .select("round_index, slot, marked")
-        .eq("user_id", user.id)
-        .eq("room_id", room.id)
-        .gte("round_index", currentRoundIndex)
-        .order("round_index", { ascending: true })
-        .order("slot", { ascending: true });
-
-      if (cancelled) return;
-      if (error) {
-        console.warn("[Bingo] lettura cartelle online fallita", error);
-        setPurchasedCards(readPersistedCards(storageKey, currentRoundIndex));
-        return;
-      }
-
-      setPurchasedCards((Array.isArray(data) ? data : []).map((entry: any) => ({
-        roundIndex: Number(entry.round_index),
-        slot: Number(entry.slot),
-        marked: Array.isArray(entry.marked) ? entry.marked.filter((value: unknown) => typeof value === "number") : [],
-      })));
-    }
-
-    void loadOnlineCards();
-    return () => { cancelled = true; };
-  }, [storageKey, currentRoundIndex, isGuest, user?.id, room.id]);
+    setPurchasedCards(readPersistedCards(storageKey, currentRoundIndex));
+  }, [storageKey, currentRoundIndex, isGuest]);
 
   useEffect(() => {
     if (typeof window === "undefined" || isGuest) return;
     const persistedCards = purchasedCards.filter((entry) => entry.roundIndex >= currentRoundIndex);
     window.localStorage.setItem(storageKey, JSON.stringify(persistedCards));
   }, [storageKey, purchasedCards, currentRoundIndex, isGuest]);
-
-  useEffect(() => {
-    if (isGuest || !user?.id) return;
-    const timeout = window.setTimeout(() => {
-      const rows = purchasedCards
-        .filter((entry) => entry.roundIndex >= currentRoundIndex)
-        .map((entry) => ({
-          user_id: user.id,
-          room_id: room.id,
-          round_index: entry.roundIndex,
-          slot: entry.slot,
-          marked: entry.marked,
-          updated_at: new Date().toISOString(),
-        }));
-      if (rows.length === 0) return;
-      void (supabase as any).from("gamespark_bingo_entries").upsert(rows, { onConflict: "user_id,room_id,round_index,slot" });
-    }, 350);
-    return () => window.clearTimeout(timeout);
-  }, [isGuest, user?.id, purchasedCards, currentRoundIndex, room.id]);
 
   useEffect(() => {
     if (isGuest || timeline.phase !== "playing" || drawnNumbers.length === 0) return;
@@ -704,6 +650,7 @@ function BingoPage() {
       addSparks(Math.floor(sparkReward));
       addTickets(Math.floor(ticketReward));
       incrementBingosWon();
+      void recordRealWin({ user, username, roomId: room.id, roomName: room.name, gameType: "bingo", prizeLabel: `+${Math.floor(sparkReward)} Spark · +${Math.floor(ticketReward)} Ticket`, sparkReward: Math.floor(sparkReward), ticketReward: Math.floor(ticketReward) });
     }
     confetti({
       particleCount: 240,
@@ -771,7 +718,7 @@ function BingoPage() {
     void navigate({ to: "/auth" });
   }
 
-  async function reserveCards() {
+  function reserveCards() {
     if (isGuest) {
       setGuestNotice("Modalità osservatore attiva: accedi per comprare cartelle e partecipare ai round.");
       sfx("error");
@@ -779,39 +726,6 @@ function BingoPage() {
       return;
     }
     if (timeline.phase === "finished") return;
-
-    let freshCards = purchasedCards;
-    let freshTickets = tickets;
-    if (user?.id) {
-      const { data: wallet } = await (supabase as any)
-        .from("gamespark_users")
-        .select("tickets, sparks, coins")
-        .eq("id", user.id)
-        .maybeSingle();
-      if (wallet) {
-        freshTickets = Number(wallet.tickets ?? tickets);
-        useGameStore.setState({
-          tickets: freshTickets,
-          sparks: Number(wallet.sparks ?? useGameStore.getState().sparks),
-          coins: Number(wallet.coins ?? useGameStore.getState().coins),
-        });
-      }
-
-      const { data: onlineCards } = await (supabase as any)
-        .from("gamespark_bingo_entries")
-        .select("round_index, slot, marked")
-        .eq("user_id", user.id)
-        .eq("room_id", room.id)
-        .gte("round_index", currentRoundIndex);
-      if (Array.isArray(onlineCards)) {
-        freshCards = onlineCards.map((entry: any) => ({
-          roundIndex: Number(entry.round_index),
-          slot: Number(entry.slot),
-          marked: Array.isArray(entry.marked) ? entry.marked : [],
-        }));
-        setPurchasedCards(freshCards);
-      }
-    }
     if (!canBuyAny || availableSlots <= 0) {
       if (room.ticketCost > 0 && tickets < room.ticketCost) {
         sfx("tap");
@@ -835,20 +749,17 @@ function BingoPage() {
       );
     } catch (e) {}
 
-    const freshReservedCount = freshCards.filter((entry) => entry.roundIndex === targetRound).length;
-    const freshAvailableSlots = Math.max(0, maxCards - freshReservedCount);
-    const freshAffordableSlots = room.ticketCost === 0 ? freshAvailableSlots : Math.min(freshAvailableSlots, Math.floor(freshTickets / room.ticketCost));
-    const qty = isFreeRoom ? Math.min(purchaseQty, freshAvailableSlots) : Math.min(purchaseQty, freshAffordableSlots);
+    const qty = isFreeRoom ? Math.min(purchaseQty, availableSlots) : Math.min(purchaseQty, affordableSlots);
     if (qty <= 0) return;
     const totalTickets = isFreeRoom ? 0 : qty * room.ticketCost;
 
-    if (totalTickets > 0 && freshTickets < totalTickets) {
+    if (totalTickets > 0 && !spendTickets(totalTickets)) {
       sfx("tap");
       navigateWithStop("/shop");
       return;
     }
 
-    const usedSlots = new Set(freshCards.filter((entry) => entry.roundIndex === targetRound).map((entry) => entry.slot));
+    const usedSlots = new Set(purchasedCards.filter((entry) => entry.roundIndex === targetRound).map((entry) => entry.slot));
     const additions: PurchasedCardState[] = [];
     let slot = 0;
     while (additions.length < qty && slot < maxCards + qty + 2) {
@@ -860,49 +771,6 @@ function BingoPage() {
     }
 
     if (additions.length === 0) return;
-
-    if (user?.id) {
-      const rows = additions.map((entry) => ({
-        user_id: user.id,
-        room_id: room.id,
-        round_index: entry.roundIndex,
-        slot: entry.slot,
-        marked: entry.marked,
-        updated_at: new Date().toISOString(),
-      }));
-      const { error: entryError } = await (supabase as any).from("gamespark_bingo_entries").insert(rows);
-      if (entryError) {
-        setGuestNotice("Cartelle già acquistate da un altro dispositivo. Ricarico lo stato online.");
-        const { data: reloaded } = await (supabase as any)
-          .from("gamespark_bingo_entries")
-          .select("round_index, slot, marked")
-          .eq("user_id", user.id)
-          .eq("room_id", room.id)
-          .gte("round_index", currentRoundIndex);
-        if (Array.isArray(reloaded)) {
-          setPurchasedCards(reloaded.map((entry: any) => ({
-            roundIndex: Number(entry.round_index),
-            slot: Number(entry.slot),
-            marked: Array.isArray(entry.marked) ? entry.marked : [],
-          })));
-        }
-        sfx("error");
-        return;
-      }
-
-      if (totalTickets > 0) {
-        const nextTickets = Math.max(0, freshTickets - totalTickets);
-        useGameStore.setState({ tickets: nextTickets });
-        await (supabase as any)
-          .from("gamespark_users")
-          .update({ tickets: nextTickets, updated_at: new Date().toISOString() })
-          .eq("id", user.id);
-      }
-    } else if (totalTickets > 0 && !spendTickets(totalTickets)) {
-      sfx("tap");
-      navigateWithStop("/shop");
-      return;
-    }
 
     sfx("coin");
     setPurchasedCards((prev) => [...prev, ...additions]);
@@ -1202,6 +1070,21 @@ function BingoPage() {
           </div>
 
           <div className="mt-3 space-y-2">
+            {roomRealWins.map((win) => (
+              <div key={win.id} className="flex items-center justify-between gap-3 rounded-2xl border border-gold/25 bg-gold/10 px-3 py-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">🏆</span>
+                  <div>
+                    <p className="text-xs font-extrabold text-white">{win.username}</p>
+                    <p className="text-[11px] font-bold text-white/55">{formatRealWin(win)}</p>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-xs font-extrabold text-gold">{win.prize_label || "Vincita reale"}</p>
+                  <p className="text-[11px] font-bold text-white/55">live</p>
+                </div>
+              </div>
+            ))}
             {recentResults.map(({ roundIndex, winners }) => (
               <div key={roundIndex} className="flex items-center justify-between gap-3 rounded-2xl border border-white/8 bg-black/20 px-3 py-2">
                 <div className="flex items-center gap-2">
