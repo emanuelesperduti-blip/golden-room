@@ -142,162 +142,77 @@ function GoldBtn({ children,onClick,disabled,flex1,variant="gold" }:{
 function ScratchCell({ prize,revealed,onReveal,disabled,isWinner,isNearWin,onScratchSfx }:{
   prize:Prize; revealed:boolean; onReveal:()=>void; disabled:boolean; isWinner:boolean; isNearWin:boolean; onScratchSfx:()=>void;
 }) {
-  const canvasRef=useRef<HTMLCanvasElement>(null);
-  const drawing=useRef(false);
-  const revealedOnce=useRef(false);
-  const strokeCount=useRef(0);
-  const lastPoint=useRef<{x:number;y:number}|null>(null);
-  void isNearWin; // prop mantenuta per compatibilità, ma nessuna animazione viene applicata alla casella.
-
-  const paintCover=useCallback(()=>{
-    const canvas=canvasRef.current; if(!canvas)return;
-    const ctx=canvas.getContext("2d", { willReadFrequently:true }); if(!ctx)return;
-    const W=canvas.width, H=canvas.height;
-    ctx.globalCompositeOperation="source-over";
-    ctx.clearRect(0,0,W,H);
-    const g0=ctx.createLinearGradient(0,0,W,H);
-    g0.addColorStop(0,"#f8fafc"); g0.addColorStop(0.32,"#aeb7c3"); g0.addColorStop(0.55,"#eef2f7"); g0.addColorStop(1,"#8f9baa");
-    ctx.fillStyle=g0; ctx.fillRect(0,0,W,H);
-    ctx.fillStyle="rgba(30,45,70,0.72)";
-    ctx.font="bold "+Math.round(W*0.24)+"px system-ui";
-    ctx.textAlign="center"; ctx.textBaseline="middle";
-    ctx.fillText("?",W/2,H/2+2);
-    const img=new window.Image();
-    img.src=lsScratch;
-    img.onload=()=>{
-      ctx.globalCompositeOperation="source-over";
-      ctx.clearRect(0,0,W,H);
-      const g=ctx.createLinearGradient(0,0,W,H);
-      g.addColorStop(0,"#f8fafc"); g.addColorStop(0.32,"#aeb7c3"); g.addColorStop(0.55,"#eef2f7"); g.addColorStop(1,"#8f9baa");
-      ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
-      ctx.drawImage(img,0,0,W,H);
-      ctx.fillStyle="rgba(30,45,70,0.62)";
-      ctx.font=`bold ${Math.round(W*0.24)}px system-ui`;
-      ctx.textAlign="center"; ctx.textBaseline="middle";
-      ctx.fillText("?",W/2,H/2+2);
-    };
-    img.onerror=()=>{
-      const g=ctx.createLinearGradient(0,0,W,H);
-      g.addColorStop(0,"#f8fafc"); g.addColorStop(0.32,"#aeb7c3"); g.addColorStop(0.55,"#eef2f7"); g.addColorStop(1,"#8f9baa");
-      ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
-      ctx.fillStyle="rgba(30,45,70,0.62)";
-      ctx.font=`bold ${Math.round(W*0.24)}px system-ui`;
-      ctx.textAlign="center"; ctx.textBaseline="middle";
-      ctx.fillText("?",W/2,H/2+2);
-    };
-  },[]);
+  const revealLock = useRef(false);
+  void isNearWin;
+  void onScratchSfx;
 
   useEffect(()=>{
-    revealedOnce.current=false;
-    strokeCount.current=0;
-    if(revealed){
-      const canvas=canvasRef.current; if(!canvas)return;
-      const ctx=canvas.getContext("2d"); if(!ctx)return;
-      ctx.clearRect(0,0,canvas.width,canvas.height);
-    } else {
-      paintCover();
-    }
-  },[revealed,paintCover]);
+    if(!revealed) revealLock.current = false;
+  },[revealed]);
 
-  const getPoint=(clientX:number,clientY:number)=>{
-    const canvas=canvasRef.current; if(!canvas)return null;
-    const rect=canvas.getBoundingClientRect();
-    const x=((clientX-rect.left)/rect.width)*canvas.width;
-    const y=((clientY-rect.top)/rect.height)*canvas.height;
-    if(x<0||y<0||x>canvas.width||y>canvas.height)return null;
-    return {x,y};
-  };
-
-  const checkReveal=useCallback(()=>{
-    if(revealedOnce.current)return;
-    const canvas=canvasRef.current; if(!canvas)return;
-    const ctx=canvas.getContext("2d", { willReadFrequently:true }); if(!ctx)return;
-    const data=ctx.getImageData(0,0,canvas.width,canvas.height).data;
-    let cleared=0;
-    // Campionamento leggero: molto più fluido su mobile rispetto al controllo di ogni pixel.
-    for(let i=3;i<data.length;i+=16) if(data[i]<90) cleared++;
-    const sampledPixels=data.length/16;
-    const ratio=cleared/sampledPixels;
-
-    // Rivela solo questa casella, una volta sola. Soglia più bassa = grattata più piacevole.
-    if(ratio>0.34){
-      revealedOnce.current=true;
-      drawing.current=false;
-      lastPoint.current=null;
-      onReveal();
-    }
-  },[onReveal]);
-
-  const scratchAt=useCallback((clientX:number,clientY:number)=>{
-    if(disabled||revealed||revealedOnce.current)return;
-    const canvas=canvasRef.current; if(!canvas)return;
-    const ctx=canvas.getContext("2d", { willReadFrequently:true }); if(!ctx)return;
-    const point=getPoint(clientX,clientY); if(!point)return;
-
-    const prev=lastPoint.current ?? point;
-    ctx.save();
-    ctx.globalCompositeOperation="destination-out";
-    ctx.lineCap="round";
-    ctx.lineJoin="round";
-    ctx.lineWidth=34;
-    ctx.beginPath();
-    ctx.moveTo(prev.x,prev.y);
-    ctx.lineTo(point.x,point.y);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(point.x,point.y,18,0,Math.PI*2);
-    ctx.fill();
-    ctx.restore();
-
-    lastPoint.current=point;
-    onScratchSfx();
-
-    strokeCount.current += 1;
-    if(strokeCount.current % 10 === 0) checkReveal();
-  },[disabled,revealed,onScratchSfx,checkReveal]);
-
-  const startDraw=(e:React.PointerEvent<HTMLCanvasElement>)=>{
-    if(disabled||revealed||revealedOnce.current)return;
-    e.preventDefault(); e.stopPropagation();
-    drawing.current=true;
-    lastPoint.current=getPoint(e.clientX,e.clientY);
-    e.currentTarget.setPointerCapture?.(e.pointerId);
-    scratchAt(e.clientX,e.clientY);
-  };
-  const moveDraw=(e:React.PointerEvent<HTMLCanvasElement>)=>{
-    if(!drawing.current)return;
-    e.preventDefault(); e.stopPropagation();
-    scratchAt(e.clientX,e.clientY);
-  };
-  const endDraw=(e:React.PointerEvent<HTMLCanvasElement>)=>{
-    e.preventDefault(); e.stopPropagation();
-    drawing.current=false;
-    lastPoint.current=null;
-    checkReveal();
-    try { e.currentTarget.releasePointerCapture?.(e.pointerId); } catch {}
-  };
+  const revealNow = useCallback((e?: React.PointerEvent<HTMLButtonElement> | React.MouseEvent<HTMLButtonElement>)=>{
+    e?.preventDefault();
+    e?.stopPropagation();
+    if(disabled || revealed || revealLock.current) return;
+    revealLock.current = true;
+    onReveal();
+  },[disabled,revealed,onReveal]);
 
   return (
-    <div style={{
-      position:"relative", overflow:"hidden", borderRadius:14,
-      background: isWinner&&revealed ? "radial-gradient(circle at 40% 35%,#4c1d9a,#2d0a70)" : "radial-gradient(circle at 40% 35%,#2e1268,#180840)",
-      border: isWinner&&revealed ? `2px solid ${prize.color}` : "2px solid rgba(130,70,220,0.45)",
-      // Casella sempre ferma: nessuna animazione su scale/glow/shake durante la grattata.
-    }}>
+    <motion.button
+      type="button"
+      disabled={disabled || revealed}
+      whileTap={{ scale: disabled || revealed ? 1 : 0.96 }}
+      onPointerDown={revealNow}
+      onClick={revealNow}
+      style={{
+        position:"relative",
+        overflow:"hidden",
+        borderRadius:14,
+        minHeight:0,
+        width:"100%",
+        height:"100%",
+        cursor:disabled||revealed?"default":"pointer",
+        touchAction:"manipulation",
+        WebkitTapHighlightColor:"transparent",
+        userSelect:"none",
+        WebkitUserSelect:"none",
+        WebkitTouchCallout:"none",
+        border: isWinner&&revealed ? `2px solid ${prize.color}` : "2px solid rgba(130,70,220,0.45)",
+        background: isWinner&&revealed ? "radial-gradient(circle at 40% 35%,#4c1d9a,#2d0a70)" : "radial-gradient(circle at 40% 35%,#2e1268,#180840)",
+        outline:"none",
+        padding:0,
+      }}
+      aria-label={revealed ? `Premio ${prize.label}` : "Tocca per rivelare la casella"}
+    >
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
         <PrizeIcon prize={prize} size={Math.min(40,32)} />
         <span style={{fontSize:"clamp(8px,1.2svh,11px)",fontWeight:800,color:prize.color}}>{prize.label}</span>
       </div>
-      <canvas ref={canvasRef} width={120} height={120}
-        className="absolute inset-0 h-full w-full touch-none"
-        style={{borderRadius:12,cursor:disabled||revealed?"default":"crosshair",display:revealed?"none":"block",touchAction:"none",userSelect:"none",WebkitUserSelect:"none",WebkitTouchCallout:"none",background:"linear-gradient(135deg,#f8fafc,#aeb7c3 35%,#eef2f7 55%,#8f9baa)",backgroundSize:"cover",backgroundPosition:"center"}}
-        onPointerDown={startDraw}
-        onPointerMove={moveDraw}
-        onPointerUp={endDraw}
-        onPointerCancel={endDraw}
-        onPointerLeave={(e)=>{ if(drawing.current) endDraw(e); }}
-      />
-    </div>
+
+      <motion.div
+        initial={false}
+        animate={revealed ? { opacity: 0, scale: 1.08 } : { opacity: 1, scale: 1 }}
+        transition={{ duration: 0.16, ease: "easeOut" }}
+        style={{
+          position:"absolute",
+          inset:0,
+          borderRadius:12,
+          display:"flex",
+          flexDirection:"column",
+          alignItems:"center",
+          justifyContent:"center",
+          pointerEvents:revealed?"none":"auto",
+          backgroundImage:`linear-gradient(135deg,rgba(248,250,252,.96),rgba(174,183,195,.98) 35%,rgba(238,242,247,.96) 55%,rgba(143,155,170,.98)), url(${lsScratch})`,
+          backgroundSize:"cover",
+          backgroundPosition:"center",
+          boxShadow:"inset 0 2px 8px rgba(255,255,255,.65), inset 0 -6px 12px rgba(20,30,50,.20)",
+        }}
+      >
+        <span style={{fontSize:"clamp(24px,4.8svh,34px)",fontWeight:900,color:"rgba(30,45,70,.50)",lineHeight:1}}>?</span>
+        <span style={{fontSize:"clamp(7px,1.1svh,9px)",fontWeight:900,letterSpacing:".12em",color:"rgba(30,45,70,.45)",textTransform:"uppercase"}}>tocca</span>
+      </motion.div>
+    </motion.button>
   );
 }
 
