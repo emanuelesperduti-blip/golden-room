@@ -19,6 +19,7 @@ import { useViewerGameState } from "@/hooks/useViewerGameState";
 import { BOTS, recentBotWins } from "@/lib/bots";
 import { ROOMS as BOT_ROOMS } from "@/lib/rooms";
 import { useAudio } from "@/hooks/useAudio";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/")(
   {
@@ -49,6 +50,41 @@ function HomePage() {
   const claimedToday = lastClaimDate === today;
   const earlyBirdUsed = lastEarlyBirdDate === today;
 
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+
+    async function loadDailyState() {
+      try {
+        const { data } = await (supabase as any)
+          .from("gamespark_users")
+          .select("sparks,tickets,streak,last_claim_date,daily_reveal_used,premium_reveals_left,last_early_bird_date,early_bird_claimed,vip,vip_expiry")
+          .eq("id", user.id)
+          .maybeSingle();
+
+        if (cancelled || !data) return;
+
+        useGameStore.setState((current) => ({
+          sparks: Number(data.sparks ?? current.sparks),
+          tickets: Number(data.tickets ?? current.tickets),
+          streak: Number(data.streak ?? current.streak),
+          lastClaimDate: data.last_claim_date ?? current.lastClaimDate,
+          dailyRevealUsed: Boolean(data.daily_reveal_used ?? current.dailyRevealUsed),
+          premiumRevealsLeft: Number(data.premium_reveals_left ?? current.premiumRevealsLeft),
+          lastEarlyBirdDate: data.last_early_bird_date ?? current.lastEarlyBirdDate,
+          earlyBirdClaimed: Boolean(data.early_bird_claimed ?? current.earlyBirdClaimed),
+          vip: Boolean(data.vip ?? current.vip),
+          vipExpiry: data.vip_expiry ?? current.vipExpiry,
+        }));
+      } catch (err) {
+        console.warn("Daily state sync failed", err);
+      }
+    }
+
+    loadDailyState();
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
   const xpInLevel = xp % 100;
   const xpPct = xpInLevel;
 
@@ -57,27 +93,144 @@ function HomePage() {
     setTimeout(() => setToast(null), 2800);
   }
 
-  function handleDailyClaim() {
-    const result = dailyClaim();
-    if (!result.ok) {
-      sfx("error");
-      showToast("Ricompensa già riscattata oggi!");
+  async function handleDailyClaim() {
+    if (!user?.id) {
+      const result = dailyClaim();
+      if (!result.ok) {
+        sfx("error");
+        showToast("Ricompensa già riscattata oggi!");
+        return;
+      }
+      sfx("claim");
+      confetti({ particleCount: 160, spread: 90, origin: { y: 0.4 }, colors: ["#f5b400", "#ff3da6", "#7c3aed"] });
+      showToast(result.streakBonus
+        ? `🎉 Streak ${result.streak}! +${result.sparks} Spark +${result.tickets} Ticket BONUS!`
+        : `🔥 Streak ${result.streak} · +${result.sparks} Spark +${result.tickets} Ticket`
+      );
       return;
     }
-    sfx("claim");
-    confetti({ particleCount: 160, spread: 90, origin: { y: 0.4 }, colors: ["#f5b400", "#ff3da6", "#7c3aed"] });
-    showToast(result.streakBonus
-      ? `🎉 Streak ${result.streak}! +${result.sparks} Spark +${result.tickets} Ticket BONUS!`
-      : `🔥 Streak ${result.streak} · +${result.sparks} Spark +${result.tickets} Ticket`
-    );
+
+    try {
+      const { data: profile } = await (supabase as any)
+        .from("gamespark_users")
+        .select("sparks,tickets,streak,last_claim_date")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const { error: claimError } = await (supabase as any)
+        .from("gamespark_daily_claims")
+        .insert({ user_id: user.id, claim_date: today, claim_type: "daily_bonus" });
+
+      if (claimError) {
+        sfx("error");
+        showToast("Ricompensa già riscattata oggi!");
+        return;
+      }
+
+      const yesterday = new Date();
+      yesterday.setDate(yesterday.getDate() - 1);
+      const yesterdayStr = yesterday.toISOString().split("T")[0];
+      const dbLastClaim = profile?.last_claim_date ?? null;
+      const dbStreak = Number(profile?.streak ?? 0);
+      const newStreak = dbLastClaim === yesterdayStr ? dbStreak + 1 : 1;
+      const baseSparks = 6 + newStreak * 2;
+      const baseTickets = newStreak >= 7 ? 2 : newStreak >= 5 ? 1 : 0;
+      const streakBonus = newStreak % 7 === 0;
+      const bonusSparks = streakBonus ? 20 : 0;
+      const sparksWon = baseSparks + bonusSparks;
+      const newSparks = Number(profile?.sparks ?? useGameStore.getState().sparks) + sparksWon;
+      const newTickets = Number(profile?.tickets ?? useGameStore.getState().tickets) + baseTickets;
+
+      await (supabase as any)
+        .from("gamespark_users")
+        .update({
+          sparks: newSparks,
+          tickets: newTickets,
+          streak: newStreak,
+          last_claim_date: today,
+          daily_reveal_used: false,
+          early_bird_claimed: false,
+        })
+        .eq("id", user.id);
+
+      useGameStore.setState({
+        sparks: newSparks,
+        tickets: newTickets,
+        streak: newStreak,
+        lastClaimDate: today,
+        dailyRevealUsed: false,
+        earlyBirdClaimed: false,
+      });
+      progressMission("streak_3", newStreak);
+
+      sfx("claim");
+      confetti({ particleCount: 160, spread: 90, origin: { y: 0.4 }, colors: ["#f5b400", "#ff3da6", "#7c3aed"] });
+      showToast(streakBonus
+        ? `🎉 Streak ${newStreak}! +${sparksWon} Spark +${baseTickets} Ticket BONUS!`
+        : `🔥 Streak ${newStreak} · +${sparksWon} Spark +${baseTickets} Ticket`
+      );
+    } catch (err) {
+      console.error("Daily claim failed", err);
+      sfx("error");
+      showToast("Errore durante il claim. Riprova.");
+    }
   }
 
-  function handleEarlyBird() {
-    const result = claimEarlyBird();
-    if (!result.ok) { sfx("error"); showToast("Early Bird già riscattato oggi!"); return; }
-    sfx("claim");
-    confetti({ particleCount: 100, spread: 70, origin: { y: 0.5 }, colors: ["#f5b400", "#ff3da6"] });
-    showToast("⚡ Early Bird! +50 Spark +1 Reveal Premium");
+  async function handleEarlyBird() {
+    if (!user?.id) {
+      const result = claimEarlyBird();
+      if (!result.ok) { sfx("error"); showToast("Early Bird già riscattato oggi!"); return; }
+      sfx("claim");
+      confetti({ particleCount: 100, spread: 70, origin: { y: 0.5 }, colors: ["#f5b400", "#ff3da6"] });
+      showToast("⚡ Early Bird! +50 Spark +1 Reveal Premium");
+      return;
+    }
+
+    try {
+      const { data: profile } = await (supabase as any)
+        .from("gamespark_users")
+        .select("sparks,premium_reveals_left")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const { error: claimError } = await (supabase as any)
+        .from("gamespark_daily_claims")
+        .insert({ user_id: user.id, claim_date: today, claim_type: "early_bird" });
+
+      if (claimError) {
+        sfx("error");
+        showToast("Early Bird già riscattato oggi!");
+        return;
+      }
+
+      const newSparks = Number(profile?.sparks ?? useGameStore.getState().sparks) + 50;
+      const newPremiumRevealsLeft = Number(profile?.premium_reveals_left ?? useGameStore.getState().premiumRevealsLeft) + 1;
+
+      await (supabase as any)
+        .from("gamespark_users")
+        .update({
+          sparks: newSparks,
+          premium_reveals_left: newPremiumRevealsLeft,
+          last_early_bird_date: today,
+          early_bird_claimed: true,
+        })
+        .eq("id", user.id);
+
+      useGameStore.setState({
+        sparks: newSparks,
+        premiumRevealsLeft: newPremiumRevealsLeft,
+        lastEarlyBirdDate: today,
+        earlyBirdClaimed: true,
+      });
+
+      sfx("claim");
+      confetti({ particleCount: 100, spread: 70, origin: { y: 0.5 }, colors: ["#f5b400", "#ff3da6"] });
+      showToast("⚡ Early Bird! +50 Spark +1 Reveal Premium");
+    } catch (err) {
+      console.error("Early bird claim failed", err);
+      sfx("error");
+      showToast("Errore durante il claim. Riprova.");
+    }
   }
 
   // Shop items now go through proper purchase flow in /shop
