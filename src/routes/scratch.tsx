@@ -168,142 +168,64 @@ interface ScratchCellProps {
 }
 
 function ScratchCell({ prize, revealed, onReveal, disabled }: ScratchCellProps) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const isDrawingRef = useRef(false);
-  const scratchedMovesRef = useRef(0);
-  const revealSentRef = useRef(false);
-  const cellRef = useRef<HTMLDivElement>(null);
-
-  const paintScratchCover = useCallback(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d", { willReadFrequently: true });
-    if (!ctx) return;
-
-    ctx.globalCompositeOperation = "source-over";
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Copertura piu leggera e uniforme: si gratta meglio anche su mobile.
-    const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
-    grad.addColorStop(0, "#d7d7d7");
-    grad.addColorStop(0.35, "#f8f8f8");
-    grad.addColorStop(0.65, "#bfc4cc");
-    grad.addColorStop(1, "#f1f1f1");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-
-    for (let i = 0; i < 220; i++) {
-      ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.12})`;
-      const x = Math.random() * canvas.width;
-      const y = Math.random() * canvas.height;
-      ctx.fillRect(x, y, 1 + Math.random() * 2, 1 + Math.random() * 2);
-    }
-
-    ctx.fillStyle = "rgba(35,35,45,0.55)";
-    ctx.font = "bold 18px sans-serif";
-    ctx.textAlign = "center";
-    ctx.fillText("?", canvas.width / 2, canvas.height / 2 + 7);
-
-    scratchedMovesRef.current = 0;
-    revealSentRef.current = false;
-  }, []);
+  const [pressed, setPressed] = useState(false);
+  const revealOnceRef = useRef(false);
 
   useEffect(() => {
-    paintScratchCover();
-  }, [paintScratchCover, prize.label, prize.symbol]);
-
-  useEffect(() => {
-    if (revealed) {
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-    } else {
-      paintScratchCover();
+    if (!revealed) {
+      revealOnceRef.current = false;
+      setPressed(false);
     }
-  }, [paintScratchCover, revealed]);
+  }, [revealed]);
 
-  const scratch = useCallback(
-    (clientX: number, clientY: number) => {
-      if (disabled || revealed || revealSentRef.current) return;
-      const canvas = canvasRef.current;
-      if (!canvas) return;
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      if (!ctx) return;
-
-      const rect = canvas.getBoundingClientRect();
-      const x = ((clientX - rect.left) / rect.width) * canvas.width;
-      const y = ((clientY - rect.top) / rect.height) * canvas.height;
-
-      ctx.globalCompositeOperation = "destination-out";
-      ctx.beginPath();
-      ctx.arc(x, y, 34, 0, Math.PI * 2);
-      ctx.fill();
-
-      scratchedMovesRef.current += 1;
-
-      // Non leggiamo i pixel a ogni micro-movimento: su telefono rallentava e sembrava non grattare.
-      if (scratchedMovesRef.current % 3 !== 0 && scratchedMovesRef.current < 10) return;
-
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      let transparent = 0;
-      for (let i = 3; i < imageData.data.length; i += 4) {
-        if (imageData.data[i] < 128) transparent++;
-      }
-      const pct = transparent / (canvas.width * canvas.height);
-
-      // Soglia piu bassa + failsafe: basta grattare un po', non serve pulire tutta la casella.
-      if (pct > 0.28 || scratchedMovesRef.current >= 14) {
-        revealSentRef.current = true;
-        onReveal();
-      }
-    },
-    [disabled, revealed, onReveal],
-  );
-
-  const stopDrawing = useCallback(() => {
-    isDrawingRef.current = false;
-  }, []);
+  const reveal = useCallback(() => {
+    if (disabled || revealed || revealOnceRef.current) return;
+    revealOnceRef.current = true;
+    setPressed(true);
+    window.setTimeout(() => {
+      onReveal();
+    }, 80);
+  }, [disabled, revealed, onReveal]);
 
   return (
-    <div ref={cellRef} className="relative select-none overflow-hidden rounded-2xl" style={{ aspectRatio: "1" }}>
-      {/* Prize underneath */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 rounded-2xl border border-white/10">
+    <button
+      type="button"
+      disabled={disabled || revealed}
+      onPointerDown={(e) => {
+        e.preventDefault();
+        reveal();
+      }}
+      onClick={(e) => {
+        e.preventDefault();
+        reveal();
+      }}
+      className="relative select-none overflow-hidden rounded-2xl outline-none disabled:cursor-default"
+      style={{ aspectRatio: "1", touchAction: "manipulation" }}
+      aria-label={revealed ? `Premio ${prize.label}` : "Rivela casella gratta e vinci"}
+    >
+      <div className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-white/10 bg-black/40">
         <span className="text-3xl leading-none">{prize.symbol}</span>
         <span className="mt-1 text-[10px] font-extrabold" style={{ color: prize.color }}>
           {prize.label}
         </span>
       </div>
 
-      {/* Scratch overlay */}
-      {!revealed && (
-        <canvas
-          ref={canvasRef}
-          width={140}
-          height={140}
-          className="absolute inset-0 h-full w-full cursor-crosshair rounded-2xl touch-none select-none"
-          style={{ WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none" }}
-          onPointerDown={(e) => {
-            if (disabled) return;
-            isDrawingRef.current = true;
-            e.currentTarget.setPointerCapture?.(e.pointerId);
-            scratch(e.clientX, e.clientY);
-          }}
-          onPointerMove={(e) => {
-            if (!isDrawingRef.current) return;
-            e.preventDefault();
-            scratch(e.clientX, e.clientY);
-          }}
-          onPointerUp={stopDrawing}
-          onPointerCancel={stopDrawing}
-          onPointerLeave={stopDrawing}
-        />
-      )}
-    </div>
+      <motion.div
+        initial={false}
+        animate={revealed || pressed ? { opacity: 0, scale: 1.08 } : { opacity: 1, scale: 1 }}
+        transition={{ duration: 0.18, ease: "easeOut" }}
+        className="absolute inset-0 flex flex-col items-center justify-center rounded-2xl border border-yellow-200/50 bg-gradient-to-br from-zinc-200 via-zinc-400 to-zinc-100 shadow-inner"
+        style={{ pointerEvents: revealed ? "none" : "auto" }}
+      >
+        <div className="absolute inset-0 rounded-2xl bg-[radial-gradient(circle_at_30%_20%,rgba(255,255,255,0.9),transparent_28%),linear-gradient(135deg,rgba(0,0,0,0.18),transparent_35%,rgba(0,0,0,0.14))]" />
+        <span className="relative text-2xl font-black text-black/35">?</span>
+        <span className="relative mt-1 text-[8px] font-black uppercase tracking-wider text-black/35">tocca</span>
+      </motion.div>
+    </button>
   );
 }
-// ─── Main Page ────────────────────────────────────────────────
+
+// Main Page
 function ScratchPage() {
   const { sfx } = useAudio();
   const sparks = useGameStore((s) => s.sparks);
@@ -409,8 +331,8 @@ function ScratchPage() {
           </motion.button>
         </Link>
         <div>
-          <h1 className="text-stroke-game text-2xl font-extrabold text-gold">🎰 Gratta & Vinci</h1>
-          <p className="text-xs font-bold text-white/60">Gratta le caselle e scopri i premi!</p>
+          <h1 className="text-stroke-game text-2xl font-extrabold text-gold">🎰 Tocca & Vinci</h1>
+          <p className="text-xs font-bold text-white/60">Tocca le caselle e scopri i premi!</p>
         </div>
       </header>
 
@@ -464,7 +386,7 @@ function ScratchPage() {
           {/* Regole rapide */}
           <div className="rounded-2xl border border-white/10 bg-card-game p-3 text-center">
             <p className="text-xs font-bold text-white/50">
-              ✨ Trova 3 simboli uguali per vincere! · Gratta le caselle col dito
+              ✨ Trova 3 simboli uguali per vincere! · Tocca le caselle per rivelarle
             </p>
           </div>
         </motion.div>
@@ -493,7 +415,7 @@ function ScratchPage() {
             <div className="flex items-center justify-between mb-4">
               <div>
                 <p className="font-extrabold text-white text-lg">{cfg.emoji} {cfg.label}</p>
-                <p className="text-xs text-white/60">Gratta le 9 caselle • 3 uguali = VINCI</p>
+                <p className="text-xs text-white/60">Tocca le 9 caselle • 3 uguali = VINCI</p>
               </div>
               <Star className="h-6 w-6 text-gold animate-pulse" />
             </div>
