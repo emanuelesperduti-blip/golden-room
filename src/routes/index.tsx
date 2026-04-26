@@ -18,7 +18,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useViewerGameState } from "@/hooks/useViewerGameState";
 import { BOTS, recentBotWins } from "@/lib/bots";
 import { formatRealWin, useRecentWinHistory } from "@/lib/winHistory";
-import { ROOMS as BOT_ROOMS } from "@/lib/rooms";
+import { ROOMS as BOT_ROOMS, getRoom } from "@/lib/rooms";
 import { useAudio } from "@/hooks/useAudio";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -50,6 +50,7 @@ function HomePage() {
   const today = new Date().toISOString().split("T")[0];
   const claimedToday = lastClaimDate === today;
   const earlyBirdUsed = lastEarlyBirdDate === today;
+  const recommendedRoom = getRoom("night-rush");
 
   useEffect(() => {
     if (!user?.id) return;
@@ -419,20 +420,20 @@ function HomePage() {
                   <Badge variant="hot">HOT</Badge>
                 </div>
                 <h3 className="text-stroke-game mt-1 text-2xl font-extrabold leading-tight text-white">
-                  Night Bingo Rush
+                  {recommendedRoom.name}
                 </h3>
-                <p className="text-sm font-bold text-white/80">Bingo veloce e divertente!</p>
+                <p className="text-sm font-bold text-white/80">{recommendedRoom.subtitle}</p>
               </div>
             </div>
             <div className="mt-3 flex items-center gap-2">
               <div className="flex-1 rounded-2xl bg-gold-shine px-3 py-2 text-center shadow-button-gold">
                 <span className="text-stroke-thin text-sm font-extrabold text-purple-deep">
-                  <Ticket className="mr-1 inline h-4 w-4" /> 1 Ticket
+                  <Ticket className="mr-1 inline h-4 w-4" /> {recommendedRoom.ticketCost === 0 ? "Gratis" : `${recommendedRoom.ticketCost} Ticket`}
                 </span>
               </div>
               <div className="flex-1 rounded-2xl bg-magenta-grad px-3 py-2 text-center shadow-button-game">
                 <span className="text-stroke-thin text-sm font-extrabold text-white">
-                  <Flame className="mr-1 inline h-4 w-4" /> +60 Spark
+                  <Flame className="mr-1 inline h-4 w-4" /> +{recommendedRoom.sparkReward} Spark{recommendedRoom.ticketReward > 0 ? ` · +${recommendedRoom.ticketReward} Ticket` : ""}
                 </span>
               </div>
             </div>
