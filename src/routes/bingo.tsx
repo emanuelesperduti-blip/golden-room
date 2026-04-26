@@ -296,7 +296,7 @@ function BingoPage() {
   const isGuest = !user;
   const storageKey = useMemo(() => getBingoStorageKey(room.id, user?.id ?? null), [room.id, user?.id]);
   const botConfig = useMemo(() => getBotConfigForRoom(room.id), [room.id]);
-  const roomRealWins = useRecentWinHistory(5, room.id);
+  const roomRealWins = useRecentWinHistory(8, room.id);
   const botCount = botConfig.enabled ? botConfig.botCount : 0;
 
   const drawOrder = useMemo(() => drawOrderForRound(room, currentRoundIndex), [room, currentRoundIndex]);
@@ -359,24 +359,6 @@ function BingoPage() {
     playerCards: currentReservations.map((entry) => ({ slot: entry.slot })),
     botCount,
   }), [room, currentRoundIndex, playerSeed, username, currentReservations, botCount]);
-  const recentResults = useMemo(() => {
-    const settledRound = timeline.phase === "finished" ? currentRoundIndex : currentRoundIndex - 1;
-    return Array.from({ length: 3 }, (_, idx) => settledRound - idx)
-      .filter((roundIndex) => roundIndex >= 0)
-      .map((roundIndex) => ({
-        roundIndex,
-        winners: getRoundOutcome({
-          room,
-          roundIndex,
-          playerSeed,
-          playerName: username,
-          playerCards: [],
-          botCount: botCount,
-        }).winners,
-      }))
-      .filter((entry) => entry.winners.length > 0);
-  }, [timeline.phase, currentRoundIndex, room, playerSeed, username, botCount]);
-
   const displayedWinnerNames = Array.from(new Set(
     (winnerNames.length > 0 ? winnerNames : currentRoundOutcome.winners.map((entry) => entry.name)).filter(Boolean),
   ));
@@ -1082,21 +1064,6 @@ function BingoPage() {
                 <div className="text-right">
                   <p className="text-xs font-extrabold text-gold">{win.prize_label || "Vincita reale"}</p>
                   <p className="text-[11px] font-bold text-white/55">live</p>
-                </div>
-              </div>
-            ))}
-            {recentResults.map(({ roundIndex, winners }) => (
-              <div key={roundIndex} className="flex items-center justify-between gap-3 rounded-2xl border border-white/8 bg-black/20 px-3 py-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">{winners[0]?.avatar ?? "🏆"}</span>
-                  <div>
-                    <p className="text-xs font-extrabold text-white">Round #{roundIndex + 1}</p>
-                    <p className="text-[11px] font-bold text-white/55">Vincitori validati: {Array.from(new Set(winners.map((entry) => entry.name).filter(Boolean))).join(", ")}</p>
-                  </div>
-                </div>
-                <div className="text-right">
-                  <p className="text-xs font-extrabold text-gold">+{room.sparkReward} Spark</p>
-                  <p className="text-[11px] font-bold text-white/55">+{room.ticketReward} Ticket</p>
                 </div>
               </div>
             ))}
