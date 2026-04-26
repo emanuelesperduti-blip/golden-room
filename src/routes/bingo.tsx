@@ -24,6 +24,7 @@ import { useGameStore } from "@/lib/gameStore";
 import { useAudio } from "@/hooks/useAudio";
 import { setAuthRedirect } from "@/lib/authRedirect";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/client";
 import { useViewerGameState } from "@/hooks/useViewerGameState";
 import { BOTS, BotChatEngine } from "@/lib/bots";
 import { getBotConfigForRoom } from "@/lib/admin";
@@ -248,6 +249,15 @@ function BingoPage() {
   const navigate = useNavigate();
   const { sfx, speakNumber, startMusic, stopMusic, stopAll } = useAudio();
   const { user } = useAuth();
+
+  // Guard: se la room non esiste o roomId mancante, redirect alla home
+  useEffect(() => {
+    if (!room) {
+      navigate({ to: "/" });
+    }
+  }, [room, navigate]);
+
+  if (!room) return null;
 
   const playerSeed = useGameStore((s) => s.playerSeed);
   const { username, tickets } = useViewerGameState();
@@ -515,18 +525,64 @@ function BingoPage() {
   }, [botConfig.enabled, botConfig.chatPace, botConfig.reactionSpeed, botCount]);
 
   useEffect(() => {
-    if (isGuest) {
+    if (isGuest || !user?.id) {
       setPurchasedCards([]);
       return;
     }
-    setPurchasedCards(readPersistedCards(storageKey, currentRoundIndex));
-  }, [storageKey, currentRoundIndex, isGuest]);
+
+    let cancelled = false;
+    async function loadOnlineCards() {
+      const { data, error } = await (supabase as any)
+        .from("gamespark_bingo_entries")
+        .select("round_index, slot, marked")
+        .eq("user_id", user.id)
+        .eq("room_id", room.id)
+        .gte("round_index", currentRoundIndex)
+        .order("round_index", { ascending: true })
+        .order("slot", { ascending: true });
+
+      if (cancelled) return;
+      if (error) {
+        console.warn("[Bingo] lettura cartelle online fallita", error);
+        setPurchasedCards(readPersistedCards(storageKey, currentRoundIndex));
+        return;
+      }
+
+      setPurchasedCards((Array.isArray(data) ? data : []).map((entry: any) => ({
+        roundIndex: Number(entry.round_index),
+        slot: Number(entry.slot),
+        marked: Array.isArray(entry.marked) ? entry.marked.filter((value: unknown) => typeof value === "number") : [],
+      })));
+    }
+
+    void loadOnlineCards();
+    return () => { cancelled = true; };
+  }, [storageKey, currentRoundIndex, isGuest, user?.id, room.id]);
 
   useEffect(() => {
     if (typeof window === "undefined" || isGuest) return;
     const persistedCards = purchasedCards.filter((entry) => entry.roundIndex >= currentRoundIndex);
     window.localStorage.setItem(storageKey, JSON.stringify(persistedCards));
   }, [storageKey, purchasedCards, currentRoundIndex, isGuest]);
+
+  useEffect(() => {
+    if (isGuest || !user?.id) return;
+    const timeout = window.setTimeout(() => {
+      const rows = purchasedCards
+        .filter((entry) => entry.roundIndex >= currentRoundIndex)
+        .map((entry) => ({
+          user_id: user.id,
+          room_id: room.id,
+          round_index: entry.roundIndex,
+          slot: entry.slot,
+          marked: entry.marked,
+          updated_at: new Date().toISOString(),
+        }));
+      if (rows.length === 0) return;
+      void (supabase as any).from("gamespark_bingo_entries").upsert(rows, { onConflict: "user_id,room_id,round_index,slot" });
+    }, 350);
+    return () => window.clearTimeout(timeout);
+  }, [isGuest, user?.id, purchasedCards, currentRoundIndex, room.id]);
 
   useEffect(() => {
     if (isGuest || timeline.phase !== "playing" || drawnNumbers.length === 0) return;
@@ -715,7 +771,7 @@ function BingoPage() {
     void navigate({ to: "/auth" });
   }
 
-  function reserveCards() {
+  async function reserveCards() {
     if (isGuest) {
       setGuestNotice("Modalità osservatore attiva: accedi per comprare cartelle e partecipare ai round.");
       sfx("error");
@@ -723,6 +779,39 @@ function BingoPage() {
       return;
     }
     if (timeline.phase === "finished") return;
+
+    let freshCards = purchasedCards;
+    let freshTickets = tickets;
+    if (user?.id) {
+      const { data: wallet } = await (supabase as any)
+        .from("gamespark_users")
+        .select("tickets, sparks, coins")
+        .eq("id", user.id)
+        .maybeSingle();
+      if (wallet) {
+        freshTickets = Number(wallet.tickets ?? tickets);
+        useGameStore.setState({
+          tickets: freshTickets,
+          sparks: Number(wallet.sparks ?? useGameStore.getState().sparks),
+          coins: Number(wallet.coins ?? useGameStore.getState().coins),
+        });
+      }
+
+      const { data: onlineCards } = await (supabase as any)
+        .from("gamespark_bingo_entries")
+        .select("round_index, slot, marked")
+        .eq("user_id", user.id)
+        .eq("room_id", room.id)
+        .gte("round_index", currentRoundIndex);
+      if (Array.isArray(onlineCards)) {
+        freshCards = onlineCards.map((entry: any) => ({
+          roundIndex: Number(entry.round_index),
+          slot: Number(entry.slot),
+          marked: Array.isArray(entry.marked) ? entry.marked : [],
+        }));
+        setPurchasedCards(freshCards);
+      }
+    }
     if (!canBuyAny || availableSlots <= 0) {
       if (room.ticketCost > 0 && tickets < room.ticketCost) {
         sfx("tap");
@@ -746,17 +835,20 @@ function BingoPage() {
       );
     } catch (e) {}
 
-    const qty = isFreeRoom ? Math.min(purchaseQty, availableSlots) : Math.min(purchaseQty, affordableSlots);
+    const freshReservedCount = freshCards.filter((entry) => entry.roundIndex === targetRound).length;
+    const freshAvailableSlots = Math.max(0, maxCards - freshReservedCount);
+    const freshAffordableSlots = room.ticketCost === 0 ? freshAvailableSlots : Math.min(freshAvailableSlots, Math.floor(freshTickets / room.ticketCost));
+    const qty = isFreeRoom ? Math.min(purchaseQty, freshAvailableSlots) : Math.min(purchaseQty, freshAffordableSlots);
     if (qty <= 0) return;
     const totalTickets = isFreeRoom ? 0 : qty * room.ticketCost;
 
-    if (totalTickets > 0 && !spendTickets(totalTickets)) {
+    if (totalTickets > 0 && freshTickets < totalTickets) {
       sfx("tap");
       navigateWithStop("/shop");
       return;
     }
 
-    const usedSlots = new Set(purchasedCards.filter((entry) => entry.roundIndex === targetRound).map((entry) => entry.slot));
+    const usedSlots = new Set(freshCards.filter((entry) => entry.roundIndex === targetRound).map((entry) => entry.slot));
     const additions: PurchasedCardState[] = [];
     let slot = 0;
     while (additions.length < qty && slot < maxCards + qty + 2) {
@@ -768,6 +860,49 @@ function BingoPage() {
     }
 
     if (additions.length === 0) return;
+
+    if (user?.id) {
+      const rows = additions.map((entry) => ({
+        user_id: user.id,
+        room_id: room.id,
+        round_index: entry.roundIndex,
+        slot: entry.slot,
+        marked: entry.marked,
+        updated_at: new Date().toISOString(),
+      }));
+      const { error: entryError } = await (supabase as any).from("gamespark_bingo_entries").insert(rows);
+      if (entryError) {
+        setGuestNotice("Cartelle già acquistate da un altro dispositivo. Ricarico lo stato online.");
+        const { data: reloaded } = await (supabase as any)
+          .from("gamespark_bingo_entries")
+          .select("round_index, slot, marked")
+          .eq("user_id", user.id)
+          .eq("room_id", room.id)
+          .gte("round_index", currentRoundIndex);
+        if (Array.isArray(reloaded)) {
+          setPurchasedCards(reloaded.map((entry: any) => ({
+            roundIndex: Number(entry.round_index),
+            slot: Number(entry.slot),
+            marked: Array.isArray(entry.marked) ? entry.marked : [],
+          })));
+        }
+        sfx("error");
+        return;
+      }
+
+      if (totalTickets > 0) {
+        const nextTickets = Math.max(0, freshTickets - totalTickets);
+        useGameStore.setState({ tickets: nextTickets });
+        await (supabase as any)
+          .from("gamespark_users")
+          .update({ tickets: nextTickets, updated_at: new Date().toISOString() })
+          .eq("id", user.id);
+      }
+    } else if (totalTickets > 0 && !spendTickets(totalTickets)) {
+      sfx("tap");
+      navigateWithStop("/shop");
+      return;
+    }
 
     sfx("coin");
     setPurchasedCards((prev) => [...prev, ...additions]);

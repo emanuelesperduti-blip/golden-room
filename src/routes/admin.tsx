@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useRef, type ReactNode } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion } from "framer-motion";
 import {
@@ -29,12 +29,6 @@ import {
   Send,
   X,
   ChevronDown,
-  UploadCloud,
-  CheckCircle2,
-  XCircle,
-  Loader2,
-  RefreshCw,
-  ShieldCheck,
 } from "lucide-react";
 import { MobileShell } from "@/components/game/MobileShell";
 import { useAuth } from "@/hooks/useAuth";
@@ -52,6 +46,7 @@ import {
 } from "@/lib/admin";
 import { ROOMS, getRoomTimeline } from "@/lib/rooms";
 import { useAdminStore, type UserProfile, type ActivityLog } from "@/lib/adminStore";
+import { supabase } from "@/integrations/supabase/client";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -74,7 +69,7 @@ function AdminPage() {
     const t = setInterval(() => setNow(Date.now()), 5000);
     return () => clearInterval(t);
   }, []);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "currencies" | "rooms" | "users" | "leaderboard" | "notifications" | "maintenance" | "events" | "logs" | "email" | "update">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "currencies" | "rooms" | "users" | "leaderboard" | "notifications" | "maintenance" | "events" | "logs" | "email">("dashboard");
 
   // Admin store
   const {
@@ -203,17 +198,16 @@ function AdminPage() {
         {/* Tab Navigation */}
         <div className="mt-4 flex gap-2 overflow-x-auto pb-2">
           {[
-            { id: "dashboard",     label: "Dashboard",      icon: BarChart3 },
-            { id: "currencies",    label: "Valute",         icon: Sparkles },
-            { id: "email",         label: "Email",          icon: Send },
-            { id: "rooms",         label: "Room",           icon: SlidersHorizontal },
-            { id: "users",         label: "Utenti",         icon: Users },
-            { id: "leaderboard",   label: "Classifica",     icon: TrendingUp },
-            { id: "notifications", label: "Notifiche",      icon: Bell },
-            { id: "maintenance",   label: "Manutenzione",   icon: Wrench },
-            { id: "events",        label: "Eventi",         icon: Zap },
-            { id: "logs",          label: "Log",            icon: FileText },
-            { id: "update",        label: "Aggiornamenti",  icon: UploadCloud },
+            { id: "dashboard", label: "Dashboard", icon: BarChart3 },
+            { id: "currencies", label: "Valute", icon: Sparkles },
+            { id: "email", label: "Email", icon: Send },
+            { id: "rooms", label: "Room", icon: SlidersHorizontal },
+            { id: "users", label: "Utenti", icon: Users },
+            { id: "leaderboard", label: "Classifica", icon: TrendingUp },
+            { id: "notifications", label: "Notifiche", icon: Bell },
+            { id: "maintenance", label: "Manutenzione", icon: Wrench },
+            { id: "events", label: "Eventi", icon: Zap },
+            { id: "logs", label: "Log", icon: FileText },
           ].map(({ id, label, icon: Icon }) => (
             <button
               key={id}
@@ -366,7 +360,6 @@ function AdminPage() {
 
         {/* Step 12: Logs Tab */}
         {activeTab === "logs" && <LogsTab activityLogs={activityLogs} getActivityLogs={getActivityLogs} />}
-        {activeTab === "update" && <UpdateTab />}
 
         {/* Bot Management Section */}
         <section className="mt-4 rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
@@ -874,6 +867,26 @@ function UsersTab({
                   </div>
 
                   <div className="flex gap-2 pt-2">
+                    <button
+                      onClick={async (e) => {
+                        e.stopPropagation();
+                        const nextName = window.prompt("Nuovo nome utente", user.username || "");
+                        if (!nextName?.trim()) return;
+                        const username = nextName.trim();
+                        updateUser(user.id, { username });
+                        await (supabase as any).from("gamespark_users").update({ username, updated_at: new Date().toISOString() }).eq("id", user.id);
+                        addActivityLog({
+                          type: "admin_action",
+                          userId: user.id,
+                          username,
+                          details: { action: "rename_user" },
+                          severity: "info",
+                        });
+                      }}
+                      className="flex-1 rounded-lg border border-cyan-300/50 bg-cyan-500/10 px-2 py-1 text-xs font-bold text-cyan-200 hover:bg-cyan-500/20"
+                    >
+                      <Edit2 className="h-3 w-3 inline mr-1" /> Nome
+                    </button>
                     {!user.isBanned ? (
                       <button
                         onClick={() => {
@@ -1496,306 +1509,4 @@ function phaseLabel(phase: ReturnType<typeof getRoomTimeline>["phase"]) {
     default:
       return phase;
   }
-}
-
-// ─── UpdateTab ────────────────────────────────────────────────
-const UPDATE_SERVER_KEY = "golden-room-update-server-url";
-const UPDATE_TOKEN_KEY  = "golden-room-update-token";
-
-function UpdateTab() {
-  const [serverUrl,   setServerUrl]   = useState(() => localStorage.getItem(UPDATE_SERVER_KEY) || window.location.origin);
-  const [token,       setToken]       = useState(() => localStorage.getItem(UPDATE_TOKEN_KEY)  || "");
-  const [zipFile,     setZipFile]     = useState<File | null>(null);
-  const [skipNpm,     setSkipNpm]     = useState(false);
-  const [skipBuild,   setSkipBuild]   = useState(false);
-  const [noRestart,   setNoRestart]   = useState(false);
-  const [phase,       setPhase]       = useState<"idle" | "uploading" | "installing" | "done">("idle");
-  const [success,     setSuccess]     = useState<boolean | null>(null);
-  const [logs,        setLogs]        = useState<string[]>([]);
-  const [uploadPct,   setUploadPct]   = useState(0);
-  const [uploadedPath, setUploadedPath] = useState<string | null>(null);
-  const logEndRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [logs]);
-
-  function saveSettings() {
-    localStorage.setItem(UPDATE_SERVER_KEY, serverUrl);
-    localStorage.setItem(UPDATE_TOKEN_KEY,  token);
-  }
-
-  function addLog(msg: string) {
-    setLogs((prev) => [...prev, msg]);
-  }
-
-  async function handleUpload() {
-    if (!zipFile) return;
-    saveSettings();
-    setPhase("uploading");
-    setLogs([]);
-    setSuccess(null);
-    setUploadPct(0);
-
-    try {
-      const formData = new FormData();
-      formData.append("file", zipFile);
-
-      const xhr = new XMLHttpRequest();
-      xhr.open("POST", `${serverUrl}/update-api/upload`);
-      xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-
-      xhr.upload.onprogress = (e) => {
-        if (e.lengthComputable) setUploadPct(Math.round((e.loaded / e.total) * 100));
-      };
-
-      const result = await new Promise<{ ok: boolean; path?: string; error?: string }>((resolve, reject) => {
-        xhr.onload  = () => { try { resolve(JSON.parse(xhr.responseText)); } catch { reject(new Error("Risposta non valida")); } };
-        xhr.onerror = () => reject(new Error("Errore di rete"));
-        xhr.send(formData);
-      });
-
-      if (!result.ok) throw new Error(result.error || "Upload fallito");
-
-      setUploadedPath(result.path!);
-      addLog(`✅ ZIP caricato: ${zipFile.name} (${result.path})`);
-      await startInstall(result.path!);
-    } catch (err: any) {
-      addLog(`❌ ${err.message}`);
-      setPhase("done");
-      setSuccess(false);
-    }
-  }
-
-  async function startInstall(zipPath: string) {
-    setPhase("installing");
-    addLog("🔄 Avvio installazione...");
-
-    // Apri SSE stream con fetch manuale perché EventSource non supporta header Authorization.
-    const resp = await fetch(`${serverUrl}/update-api/stream`, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
-
-    if (!resp.body) throw new Error("SSE non supportato");
-
-    const reader = resp.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    // Avvia la chiamata install in parallelo e intercetta subito eventuali errori di avvio.
-    const installPromise = fetch(`${serverUrl}/update-api/install`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-      body: JSON.stringify({ zipPath, skipNpmInstall: skipNpm, skipBuild, noRestart }),
-    }).then(async (installResp) => {
-      if (!installResp.ok) {
-        let msg = `Installazione non avviata (${installResp.status})`;
-        try {
-          const body = await installResp.json();
-          if (body?.error) msg = body.error;
-        } catch {}
-        throw new Error(msg);
-      }
-      return installResp;
-    });
-
-    installPromise.catch((err: any) => {
-      addLog(`❌ ${err.message || "Errore avvio installazione"}`);
-      setSuccess(false);
-      setPhase("done");
-      reader.cancel().catch(() => {});
-    });
-
-    // Leggi stream SSE
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-      for (const line of lines) {
-        if (!line.startsWith("data:")) continue;
-        try {
-          const data = JSON.parse(line.slice(5).trim());
-          if (data.type === "log") addLog(data.msg);
-          if (data.type === "status" && !data.running) {
-            setSuccess(data.success);
-            setPhase("done");
-            reader.cancel();
-            return;
-          }
-        } catch {}
-      }
-    }
-    setPhase("done");
-  }
-
-  function reset() {
-    setPhase("idle");
-    setZipFile(null);
-    setLogs([]);
-    setSuccess(null);
-    setUploadPct(0);
-    setUploadedPath(null);
-  }
-
-  const inputClass = "w-full rounded-xl border border-white/15 bg-black/40 px-3 py-2 text-sm text-white placeholder:text-white/30 focus:border-gold/50 focus:outline-none";
-  const labelClass = "mb-1 block text-xs font-bold text-white/60";
-
-  return (
-    <div className="mt-4 space-y-4">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-gold/20 border border-gold/30">
-          <UploadCloud className="h-5 w-5 text-gold" />
-        </div>
-        <div>
-          <h2 className="text-lg font-extrabold text-white">Aggiornamenti App</h2>
-          <p className="text-xs text-white/50">Carica uno ZIP per aggiornare il sito senza SSH</p>
-        </div>
-      </div>
-
-      {/* Config server */}
-      <div className="rounded-2xl border border-white/10 bg-card-game p-4 space-y-3">
-        <p className="text-xs font-extrabold uppercase tracking-widest text-white/40">Configurazione Server</p>
-        <div>
-          <label className={labelClass}>Dominio app (es. https://gamespark.it)</label>
-          <input className={inputClass} value={serverUrl} onChange={(e) => setServerUrl(e.target.value)} placeholder="https://gamespark.it" />
-        </div>
-        <div>
-          <label className={labelClass}>Token Admin</label>
-          <input className={inputClass} type="password" value={token} onChange={(e) => setToken(e.target.value)} placeholder="UPDATE_ADMIN_TOKEN" />
-        </div>
-        <p className="text-[10px] text-white/30">
-          Il token deve corrispondere a <code className="text-gold/70">UPDATE_ADMIN_TOKEN</code> nel <code className="text-gold/70">.env</code> del server.
-        </p>
-      </div>
-
-      {/* Upload + opzioni */}
-      {phase === "idle" && (
-        <div className="rounded-2xl border border-white/10 bg-card-game p-4 space-y-4">
-          <p className="text-xs font-extrabold uppercase tracking-widest text-white/40">Carica Aggiornamento</p>
-
-          {/* Drop zone */}
-          <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-white/20 bg-black/20 p-6 text-center hover:border-gold/40 transition-colors">
-            <UploadCloud className="h-8 w-8 text-white/30" />
-            {zipFile ? (
-              <>
-                <span className="text-sm font-bold text-gold">{zipFile.name}</span>
-                <span className="text-xs text-white/40">{(zipFile.size / 1024 / 1024).toFixed(2)} MB</span>
-              </>
-            ) : (
-              <>
-                <span className="text-sm font-bold text-white/60">Trascina o clicca per scegliere ZIP</span>
-                <span className="text-xs text-white/30">Massimo 100 MB · solo .zip</span>
-              </>
-            )}
-            <input type="file" accept=".zip" className="hidden" onChange={(e) => setZipFile(e.target.files?.[0] || null)} />
-          </label>
-
-          {/* Opzioni protezione */}
-          <div className="rounded-xl border border-white/10 bg-black/20 p-3 space-y-2">
-            <div className="flex items-center gap-2 mb-1">
-              <ShieldCheck className="h-4 w-4 text-emerald-400" />
-              <span className="text-xs font-extrabold text-white/60">File sempre protetti (non sovrascritti)</span>
-            </div>
-            {[".env", "supabase/config.toml", "supabase/functions/send-confirmation-email/index.ts"].map((f) => (
-              <div key={f} className="flex items-center gap-2 text-[11px] text-emerald-400/80">
-                <CheckCircle2 className="h-3 w-3 shrink-0" /> <code>{f}</code>
-              </div>
-            ))}
-          </div>
-
-          {/* Opzioni avanzate */}
-          <div className="space-y-2">
-            <p className="text-xs font-extrabold uppercase tracking-widest text-white/40">Opzioni Avanzate</p>
-            {[
-              { key: "skipNpm",   state: skipNpm,   set: setSkipNpm,   label: "Salta npm install (usa dipendenze esistenti)" },
-              { key: "skipBuild", state: skipBuild, set: setSkipBuild, label: "Salta build (solo sostituzione file)" },
-              { key: "noRestart", state: noRestart, set: setNoRestart, label: "Non riavviare i servizi dopo l'update" },
-            ].map(({ key, state, set, label }) => (
-              <label key={key} className="flex items-center gap-3 cursor-pointer">
-                <div
-                  onClick={() => set(!state)}
-                  className={`relative h-5 w-9 rounded-full transition-colors ${state ? "bg-gold" : "bg-white/20"}`}
-                >
-                  <div className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform ${state ? "translate-x-4" : "translate-x-0.5"}`} />
-                </div>
-                <span className="text-xs text-white/60">{label}</span>
-              </label>
-            ))}
-          </div>
-
-          <button
-            onClick={handleUpload}
-            disabled={!zipFile || !token || !serverUrl}
-            className="flex w-full items-center justify-center gap-2 rounded-2xl bg-gold-shine py-3 font-extrabold text-purple-deep shadow-button-gold transition disabled:opacity-40"
-          >
-            <UploadCloud className="h-5 w-5" />
-            Installa Aggiornamento
-          </button>
-        </div>
-      )}
-
-      {/* Progress upload */}
-      {phase === "uploading" && (
-        <div className="rounded-2xl border border-white/10 bg-card-game p-4 space-y-3 text-center">
-          <Loader2 className="mx-auto h-8 w-8 animate-spin text-gold" />
-          <p className="font-bold text-white">Caricamento ZIP... {uploadPct}%</p>
-          <div className="h-2 rounded-full bg-white/10 overflow-hidden">
-            <div className="h-full bg-gold transition-all rounded-full" style={{ width: `${uploadPct}%` }} />
-          </div>
-        </div>
-      )}
-
-      {/* Log in tempo reale */}
-      {(phase === "installing" || phase === "done") && (
-        <div className="rounded-2xl border border-white/10 bg-card-game p-4 space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              {phase === "installing" && <Loader2 className="h-4 w-4 animate-spin text-gold" />}
-              {phase === "done" && success  && <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
-              {phase === "done" && !success && <XCircle className="h-4 w-4 text-red-400" />}
-              <span className="text-sm font-bold text-white">
-                {phase === "installing" ? "Installazione in corso..." : success ? "Aggiornamento riuscito!" : "Aggiornamento fallito"}
-              </span>
-            </div>
-            {phase === "done" && (
-              <button onClick={reset} className="flex items-center gap-1 rounded-xl bg-white/10 px-3 py-1.5 text-xs font-bold text-white hover:bg-white/20">
-                <RefreshCw className="h-3.5 w-3.5" /> Nuovo update
-              </button>
-            )}
-          </div>
-
-          {/* Log terminale */}
-          <div className="max-h-64 overflow-y-auto rounded-xl bg-black/60 p-3 font-mono text-[11px] leading-relaxed">
-            {logs.map((line, i) => {
-              const color = line.startsWith("✅") || line.startsWith("✓")
-                ? "text-emerald-400"
-                : line.startsWith("❌") || line.startsWith("✗")
-                ? "text-red-400"
-                : line.startsWith("⚠") || line.startsWith("warn")
-                ? "text-yellow-400"
-                : line.startsWith("🚀") || line.startsWith("🔨") || line.startsWith("📦")
-                ? "text-gold"
-                : "text-white/70";
-              return <p key={i} className={color}>{line}</p>;
-            })}
-            <div ref={logEndRef} />
-          </div>
-
-          {phase === "done" && success && (
-            <div className="rounded-xl border border-emerald-400/30 bg-emerald-900/20 p-3 text-center text-sm font-bold text-emerald-300">
-              🎉 Il sito è stato aggiornato correttamente. Ricarica la pagina per vedere le modifiche.
-            </div>
-          )}
-          {phase === "done" && !success && (
-            <div className="rounded-xl border border-red-400/30 bg-red-900/20 p-3 text-center text-sm font-bold text-red-300">
-              Il rollback automatico è stato eseguito. Il sito è tornato alla versione precedente.
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
 }

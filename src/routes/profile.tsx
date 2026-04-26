@@ -86,7 +86,7 @@ function ProfilePage() {
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [confirmSignOut, setConfirmSignOut] = useState(false);
 
-  const displayName = user?.name ?? username;
+  const displayName = username;
   const displayAvatar = user?.avatar_url ?? null;
   const providerLabel = user?.provider === "google" ? "Google" : user?.provider === "facebook" ? "Facebook" : user?.provider === "email" ? "Email" : null;
 
@@ -158,7 +158,7 @@ function ProfilePage() {
 
           {/* Username + provider */}
           <div className="relative mt-3 flex items-center justify-center gap-2">
-            {editingName && !user ? (
+            {editingName ? (
               <>
                 <input
                   autoFocus
@@ -177,11 +177,9 @@ function ProfilePage() {
                 <h1 className="text-stroke-game text-2xl font-extrabold text-gold">
                   @{displayName.replace(/\s+/g, "_")}
                 </h1>
-                {!user && (
-                  <button onClick={() => setEditingName(true)} className="flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-black/30 text-white/70 active:scale-90">
-                    <Edit2 className="h-3.5 w-3.5" />
-                  </button>
-                )}
+                <button onClick={() => { setNameInput(username); setEditingName(true); }} className="flex h-7 w-7 items-center justify-center rounded-full border border-white/20 bg-black/30 text-white/70 active:scale-90">
+                  <Edit2 className="h-3.5 w-3.5" />
+                </button>
               </>
             )}
           </div>
