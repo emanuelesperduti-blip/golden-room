@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useAuth } from "@/hooks/useAuth";
 import { useGameStore } from "@/lib/gameStore";
 
@@ -39,23 +40,44 @@ export function useViewerGameState() {
   const revealsOpened = useGameStore((s) => s.revealsOpened);
   const roundsPlayed = useGameStore((s) => s.roundsPlayed);
 
-  return {
-    isGuest,
-    username,
-    avatar,
-    coins: isGuest ? GUEST_VALUES.coins : coins,
-    sparks: isGuest ? GUEST_VALUES.sparks : sparks,
-    tickets: isGuest ? GUEST_VALUES.tickets : tickets,
-    hearts: isGuest ? GUEST_VALUES.hearts : hearts,
-    gems: isGuest ? GUEST_VALUES.gems : gems,
-    vip: isGuest ? GUEST_VALUES.vip : vip,
-    streak: isGuest ? GUEST_VALUES.streak : streak,
-    level: isGuest ? GUEST_VALUES.level : level,
-    xp: isGuest ? GUEST_VALUES.xp : xp,
-    premiumRevealsLeft: isGuest ? GUEST_VALUES.premiumRevealsLeft : premiumRevealsLeft,
-    rank: isGuest ? GUEST_VALUES.rank : rank,
-    bingosWon: isGuest ? GUEST_VALUES.bingosWon : bingosWon,
-    revealsOpened: isGuest ? GUEST_VALUES.revealsOpened : revealsOpened,
-    roundsPlayed: isGuest ? GUEST_VALUES.roundsPlayed : roundsPlayed,
-  };
+  return useMemo(
+    () => ({
+      isGuest,
+      username,
+      avatar,
+      coins: isGuest ? GUEST_VALUES.coins : coins,
+      sparks: isGuest ? GUEST_VALUES.sparks : sparks,
+      tickets: isGuest ? GUEST_VALUES.tickets : tickets,
+      hearts: isGuest ? GUEST_VALUES.hearts : hearts,
+      gems: isGuest ? GUEST_VALUES.gems : gems,
+      vip: isGuest ? GUEST_VALUES.vip : vip,
+      streak: isGuest ? GUEST_VALUES.streak : streak,
+      level: isGuest ? GUEST_VALUES.level : level,
+      xp: isGuest ? GUEST_VALUES.xp : xp,
+      premiumRevealsLeft: isGuest ? GUEST_VALUES.premiumRevealsLeft : premiumRevealsLeft,
+      rank: isGuest ? GUEST_VALUES.rank : rank,
+      bingosWon: isGuest ? GUEST_VALUES.bingosWon : bingosWon,
+      revealsOpened: isGuest ? GUEST_VALUES.revealsOpened : revealsOpened,
+      roundsPlayed: isGuest ? GUEST_VALUES.roundsPlayed : roundsPlayed,
+    }),
+    [
+      isGuest,
+      username,
+      avatar,
+      coins,
+      sparks,
+      tickets,
+      hearts,
+      gems,
+      vip,
+      streak,
+      level,
+      xp,
+      premiumRevealsLeft,
+      rank,
+      bingosWon,
+      revealsOpened,
+      roundsPlayed,
+    ],
+  );
 }

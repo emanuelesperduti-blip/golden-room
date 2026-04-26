@@ -42,21 +42,43 @@ function toAdminProfile(row: any) {
 export function AdminSync() {
   const { user } = useAuth();
   const gameState = useViewerGameState();
-  const { addUser, updateUser, addActivityLog, addWinRecord } = useAdminStore();
+  const addUser = useAdminStore((s) => s.addUser);
+  const updateUser = useAdminStore((s) => s.updateUser);
+  const addActivityLog = useAdminStore((s) => s.addActivityLog);
+  const addWinRecord = useAdminStore((s) => s.addWinRecord);
+
   const syncReadyRef = useRef(false);
   const loadKeyRef = useRef<string | null>(null);
-  const lastRemoteWriteRef = useRef(0);
+  const lastAdminSnapshotRef = useRef<string>("");
+  const lastRemoteSnapshotRef = useRef<string>("");
 
   const lastSparks = useRef(gameState.sparks);
   const lastTickets = useRef(gameState.tickets);
   const lastWins = useRef(gameState.bingosWon);
   const lastGames = useRef(gameState.roundsPlayed);
 
-  // Carica lo stato online dell'utente al login. Supabase diventa la fonte unica.
+  const {
+    username,
+    sparks,
+    tickets,
+    coins,
+    hearts,
+    gems,
+    level,
+    xp,
+    bingosWon,
+    roundsPlayed,
+    revealsOpened,
+    rank,
+  } = gameState;
+
+  // Carica lo stato online dell'utente al login. Supabase resta la fonte unica.
   useEffect(() => {
     if (!user) {
       syncReadyRef.current = false;
       loadKeyRef.current = null;
+      lastAdminSnapshotRef.current = "";
+      lastRemoteSnapshotRef.current = "";
       return;
     }
 
@@ -74,12 +96,7 @@ export function AdminSync() {
       const fallbackSeed = local.playerSeed || Math.floor(Math.random() * 1_000_000) + 1;
 
       try {
-        const { data, error } = await sb
-          .from("gamespark_users")
-          .select("*")
-          .eq("id", user.id)
-          .maybeSingle();
-
+        const { data, error } = await sb.from("gamespark_users").select("*").eq("id", user.id).maybeSingle();
         if (cancelled) return;
 
         if (error && error.code !== "PGRST116") {
@@ -104,16 +121,18 @@ export function AdminSync() {
             rank: numberOr(data.rank, local.rank),
           });
 
-          const normalized = {
-            id: user.id,
-            email: user.email || data.email || "",
-            username: onlineName,
-            is_online: true,
-            last_access: Date.now(),
-            player_seed: numberOr(data.player_seed, fallbackSeed),
-            updated_at: new Date().toISOString(),
-          };
-          await sb.from("gamespark_users").upsert(normalized, { onConflict: "id" });
+          await sb.from("gamespark_users").upsert(
+            {
+              id: user.id,
+              email: user.email || data.email || "",
+              username: onlineName,
+              is_online: true,
+              last_access: Date.now(),
+              player_seed: numberOr(data.player_seed, fallbackSeed),
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "id" },
+          );
         } else {
           const payload = {
             id: user.id,
@@ -162,13 +181,11 @@ export function AdminSync() {
 
     return () => {
       cancelled = true;
-      if (user?.id) {
-        void (supabase as any)
-          .from("gamespark_users")
-          .update({ is_online: false, updated_at: new Date().toISOString() })
-          .eq("id", user.id);
-        updateUser(user.id, { isOnline: false });
-      }
+      void (supabase as any)
+        .from("gamespark_users")
+        .update({ is_online: false, updated_at: new Date().toISOString() })
+        .eq("id", user.id);
+      updateUser(user.id, { isOnline: false });
     };
   }, [user?.id, user?.email, user?.name, addUser, updateUser]);
 
@@ -176,6 +193,7 @@ export function AdminSync() {
   useEffect(() => {
     if (!user || !isAdminUser(user)) return;
     let cancelled = false;
+
     async function loadAllUsers() {
       const { data, error } = await (supabase as any)
         .from("gamespark_users")
@@ -184,6 +202,7 @@ export function AdminSync() {
       if (cancelled || error || !Array.isArray(data)) return;
       for (const row of data) addUser(toAdminProfile(row));
     }
+
     void loadAllUsers();
     const interval = window.setInterval(loadAllUsers, 15000);
     return () => {
@@ -192,79 +211,114 @@ export function AdminSync() {
     };
   }, [user?.id, addUser]);
 
-  // Salva online saldo/progressi con debounce. Questo elimina i saldi diversi tra PC e smartphone.
+  // Salva online saldo/progressi con debounce. Dipendenze primitive: evita loop React #185.
   useEffect(() => {
     if (!user || !syncReadyRef.current) return;
+
+    const snapshot = JSON.stringify({
+      id: user.id,
+      email: user.email || "",
+      username,
+      sparks,
+      tickets,
+      coins,
+      hearts,
+      gems,
+      level,
+      xp,
+      bingosWon,
+      roundsPlayed,
+      revealsOpened,
+      rank,
+    });
+    if (snapshot === lastRemoteSnapshotRef.current) return;
+    lastRemoteSnapshotRef.current = snapshot;
+
     const timeout = window.setTimeout(async () => {
       const state = useGameStore.getState();
-      const payload = {
-        id: user.id,
-        email: user.email || "",
-        username: bestUserName(user, state.username),
-        sparks: state.sparks,
-        tickets: state.tickets,
-        coins: state.coins,
-        hearts: state.hearts,
-        gems: state.gems,
-        player_seed: state.playerSeed,
-        xp: state.xp,
-        level: state.level,
-        wins: state.bingosWon,
-        games_played: state.roundsPlayed,
-        reveals_opened: state.revealsOpened,
-        rank: state.rank,
-        is_online: true,
-        last_access: Date.now(),
-        updated_at: new Date().toISOString(),
-      };
-      const { error } = await (supabase as any).from("gamespark_users").upsert(payload, { onConflict: "id" });
-      if (!error) lastRemoteWriteRef.current = Date.now();
+      await (supabase as any).from("gamespark_users").upsert(
+        {
+          id: user.id,
+          email: user.email || "",
+          username: bestUserName(user, state.username),
+          sparks: state.sparks,
+          tickets: state.tickets,
+          coins: state.coins,
+          hearts: state.hearts,
+          gems: state.gems,
+          player_seed: state.playerSeed,
+          xp: state.xp,
+          level: state.level,
+          wins: state.bingosWon,
+          games_played: state.roundsPlayed,
+          reveals_opened: state.revealsOpened,
+          rank: state.rank,
+          is_online: true,
+          last_access: Date.now(),
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "id" },
+      );
     }, 450);
+
     return () => window.clearTimeout(timeout);
   }, [
     user?.id,
     user?.email,
     user?.name,
-    gameState.username,
-    gameState.sparks,
-    gameState.tickets,
-    gameState.coins,
-    gameState.hearts,
-    gameState.gems,
-    gameState.level,
-    gameState.xp,
-    gameState.bingosWon,
-    gameState.roundsPlayed,
-    gameState.revealsOpened,
-    gameState.rank,
+    username,
+    sparks,
+    tickets,
+    coins,
+    hearts,
+    gems,
+    level,
+    xp,
+    bingosWon,
+    roundsPlayed,
+    revealsOpened,
+    rank,
   ]);
 
-  // Sincronizza anche lo store admin locale per compatibilità UI.
+  // Sincronizza lo store admin locale solo se cambia davvero qualcosa.
   useEffect(() => {
     if (!user) return;
+
+    const snapshot = JSON.stringify({
+      id: user.id,
+      username,
+      sparks,
+      tickets,
+      coins,
+      roundsPlayed,
+      bingosWon,
+    });
+    if (snapshot === lastAdminSnapshotRef.current) return;
+    lastAdminSnapshotRef.current = snapshot;
+
     updateUser(user.id, {
-      username: gameState.username,
-      sparks: gameState.sparks,
-      tickets: gameState.tickets,
-      coins: gameState.coins,
+      username,
+      sparks,
+      tickets,
+      coins,
       lastAccess: Date.now(),
-      gamesPlayed: gameState.roundsPlayed,
-      wins: gameState.bingosWon,
+      gamesPlayed: roundsPlayed,
+      wins: bingosWon,
       isOnline: true,
     });
-  }, [user?.id, gameState, updateUser]);
+  }, [user?.id, username, sparks, tickets, coins, roundsPlayed, bingosWon, updateUser]);
 
-  // Track activity and logs
+  // Track activity and logs. Dipendenze primitive: evita loop React #185.
   useEffect(() => {
     if (!user) return;
 
-    if (gameState.bingosWon > lastWins.current) {
-      const diff = gameState.bingosWon - lastWins.current;
-      const sparkDelta = Math.max(0, gameState.sparks - lastSparks.current);
+    if (bingosWon > lastWins.current) {
+      const diff = bingosWon - lastWins.current;
+      const sparkDelta = Math.max(0, sparks - lastSparks.current);
       addActivityLog({
         type: "win",
         userId: user.id,
-        username: gameState.username,
+        username,
         details: { count: diff, sparksWon: sparkDelta },
         severity: "info",
       });
@@ -272,7 +326,7 @@ export function AdminSync() {
       addWinRecord({
         id: `win-${Date.now()}`,
         userId: user.id,
-        username: gameState.username,
+        username,
         roomId: "unknown",
         roomName: "Partita Bingo",
         sparkReward: sparkDelta,
@@ -282,21 +336,21 @@ export function AdminSync() {
       });
     }
 
-    if (gameState.roundsPlayed > lastGames.current) {
+    if (roundsPlayed > lastGames.current) {
       addActivityLog({
         type: "admin_action",
         userId: user.id,
-        username: gameState.username,
-        details: { action: "play_round", total: gameState.roundsPlayed },
+        username,
+        details: { action: "play_round", total: roundsPlayed },
         severity: "info",
       });
     }
 
-    lastSparks.current = gameState.sparks;
-    lastTickets.current = gameState.tickets;
-    lastWins.current = gameState.bingosWon;
-    lastGames.current = gameState.roundsPlayed;
-  }, [user, gameState, addActivityLog, addWinRecord]);
+    lastSparks.current = sparks;
+    lastTickets.current = tickets;
+    lastWins.current = bingosWon;
+    lastGames.current = roundsPlayed;
+  }, [user?.id, username, sparks, tickets, bingosWon, roundsPlayed, addActivityLog, addWinRecord]);
 
   return null;
 }
