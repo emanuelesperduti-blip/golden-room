@@ -159,213 +159,150 @@ function detectWinner(grid: Prize[]): Prize | null {
   return null;
 }
 
-// ─── Scratch Board (singolo canvas sopra tutta la griglia) ────
-interface ScratchBoardProps {
-  grid: Prize[];
-  revealed: boolean[];
-  onRevealCell: (index: number) => void;
+// ─── Scratch Canvas ────────────────────────────────────────────
+interface ScratchCellProps {
+  prize: Prize;
+  revealed: boolean;
+  onReveal: () => void;
   disabled: boolean;
 }
 
-function ScratchBoard({ grid, revealed, onRevealCell, disabled }: ScratchBoardProps) {
-  const wrapRef   = useRef<HTMLDivElement>(null);
+function ScratchCell({ prize, revealed, onReveal, disabled }: ScratchCellProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const isDrawing = useRef(false);
+  const isDrawingRef = useRef(false);
+  const scratchedMovesRef = useRef(0);
+  const revealSentRef = useRef(false);
+  const cellRef = useRef<HTMLDivElement>(null);
 
-  // Ref sempre aggiornati — i listener nativi li vedono freschi senza re-crearsi
-  const revealedRef   = useRef(revealed);
-  const disabledRef   = useRef(disabled);
-  const onRevealRef   = useRef(onRevealCell);
-  useEffect(() => { revealedRef.current   = revealed;     }, [revealed]);
-  useEffect(() => { disabledRef.current   = disabled;     }, [disabled]);
-  useEffect(() => { onRevealRef.current   = onRevealCell; }, [onRevealCell]);
-
-  // ── Disegna texture gold su tutto il canvas al mount ──────────
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const wrap   = wrapRef.current;
-    if (!canvas || !wrap) return;
-
-    const dpr = window.devicePixelRatio || 1;
-    const W   = wrap.offsetWidth;
-    const H   = wrap.offsetHeight;
-
-    // dimensioni fisiche canvas = CSS px × dpr (evita blur su retina)
-    canvas.width        = W * dpr;
-    canvas.height       = H * dpr;
-    canvas.style.width  = W + "px";
-    canvas.style.height = H + "px";
-
-    const ctx = canvas.getContext("2d")!;
-
-    // Gradiente oro su tutta la superficie
-    const grad = ctx.createLinearGradient(0, 0, W * dpr, H * dpr);
-    grad.addColorStop(0,   "#9a6e00");
-    grad.addColorStop(0.3, "#ffd700");
-    grad.addColorStop(0.6, "#f0b800");
-    grad.addColorStop(1,   "#9a6e00");
-    ctx.fillStyle = grad;
-    ctx.fillRect(0, 0, W * dpr, H * dpr);
-
-    // Rumore visivo
-    for (let i = 0; i < 4000; i++) {
-      ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.12})`;
-      ctx.fillRect(
-        Math.random() * W * dpr,
-        Math.random() * H * dpr,
-        (1 + Math.random() * 2) * dpr,
-        (1 + Math.random() * 2) * dpr,
-      );
-    }
-
-    // Etichetta "GRATTA" centrata in ogni cella
-    const cols = 3, rows = 3;
-    const cellW = (W * dpr) / cols;
-    const cellH = (H * dpr) / rows;
-    ctx.fillStyle  = "rgba(60,30,0,0.55)";
-    ctx.font       = `bold ${Math.round(cellW * 0.18)}px sans-serif`;
-    ctx.textAlign  = "center";
-    ctx.textBaseline = "middle";
-    for (let r = 0; r < rows; r++) {
-      for (let c = 0; c < cols; c++) {
-        ctx.fillText("GRATTA", c * cellW + cellW / 2, r * cellH + cellH / 2);
-      }
-    }
-  }, []);
-
-  // ── Quando una cella viene rivelata (anche da "Rivela tutto") ──
-  // cancella la sua zona del canvas senza toccare React
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    const wrap   = wrapRef.current;
-    if (!canvas || !wrap) return;
-    const ctx = canvas.getContext("2d")!;
-    const dpr = window.devicePixelRatio || 1;
-    const W   = wrap.offsetWidth;
-    const H   = wrap.offsetHeight;
-    const cellW = (W * dpr) / 3;
-    const cellH = (H * dpr) / 3;
-
-    ctx.globalCompositeOperation = "destination-out";
-    revealed.forEach((isRev, i) => {
-      if (!isRev) return;
-      const col = i % 3;
-      const row = Math.floor(i / 3);
-      ctx.fillRect(col * cellW, row * cellH, cellW, cellH);
-    });
-    ctx.globalCompositeOperation = "source-over";
-  }, [revealed]);
-
-  // ── Scratch: cancella cerchio grande, poi controlla zona ───────
-  const scratchAt = useCallback((clientX: number, clientY: number) => {
-    if (disabledRef.current) return;
-    const canvas = canvasRef.current;
-    const wrap   = wrapRef.current;
-    if (!canvas || !wrap) return;
-    const ctx = canvas.getContext("2d")!;
-    const dpr  = window.devicePixelRatio || 1;
-    const rect = wrap.getBoundingClientRect();
-
-    // posizione in pixel fisici del canvas
-    const px = (clientX - rect.left)  * dpr;
-    const py = (clientY - rect.top)   * dpr;
-
-    ctx.globalCompositeOperation = "destination-out";
-    ctx.beginPath();
-    // raggio 48 CSS-px → confortevole con il dito su mobile
-    ctx.arc(px, py, 48 * dpr, 0, Math.PI * 2);
-    ctx.fill();
-
-    // Controlla quali celle non-rivelate sono ora abbastanza scoperte
-    const W     = wrap.offsetWidth;
-    const H     = wrap.offsetHeight;
-    const cellW = (W * dpr) / 3;
-    const cellH = (H * dpr) / 3;
-
-    revealedRef.current.forEach((isRev, i) => {
-      if (isRev) return;
-      const col = i % 3;
-      const row = Math.floor(i / 3);
-      const x0  = Math.floor(col * cellW);
-      const y0  = Math.floor(row * cellH);
-      const cw  = Math.floor(cellW);
-      const ch  = Math.floor(cellH);
-
-      const data = ctx.getImageData(x0, y0, cw, ch).data;
-      let transparent = 0;
-      for (let j = 3; j < data.length; j += 4) {
-        if (data[j] < 128) transparent++;
-      }
-      if (transparent / (cw * ch) > 0.38) {
-        onRevealRef.current(i);
-      }
-    });
-  }, []);
-
-  // ── Listener touch NON-PASSIVE (native, non React) ─────────────
-  useEffect(() => {
+  const paintScratchCover = useCallback(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
+    const ctx = canvas.getContext("2d", { willReadFrequently: true });
+    if (!ctx) return;
 
-    const onTS = (e: TouchEvent) => {
-      e.preventDefault();
-      isDrawing.current = true;
-      scratchAt(e.touches[0].clientX, e.touches[0].clientY);
-    };
-    const onTM = (e: TouchEvent) => {
-      e.preventDefault();
-      if (!isDrawing.current) return;
-      scratchAt(e.touches[0].clientX, e.touches[0].clientY);
-    };
-    const onTE = () => { isDrawing.current = false; };
+    ctx.globalCompositeOperation = "source-over";
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-    canvas.addEventListener("touchstart", onTS, { passive: false });
-    canvas.addEventListener("touchmove",  onTM, { passive: false });
-    canvas.addEventListener("touchend",   onTE);
-    return () => {
-      canvas.removeEventListener("touchstart", onTS);
-      canvas.removeEventListener("touchmove",  onTM);
-      canvas.removeEventListener("touchend",   onTE);
-    };
-  }, [scratchAt]);
+    // Copertura piu leggera e uniforme: si gratta meglio anche su mobile.
+    const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+    grad.addColorStop(0, "#d7d7d7");
+    grad.addColorStop(0.35, "#f8f8f8");
+    grad.addColorStop(0.65, "#bfc4cc");
+    grad.addColorStop(1, "#f1f1f1");
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    for (let i = 0; i < 220; i++) {
+      ctx.fillStyle = `rgba(0,0,0,${Math.random() * 0.12})`;
+      const x = Math.random() * canvas.width;
+      const y = Math.random() * canvas.height;
+      ctx.fillRect(x, y, 1 + Math.random() * 2, 1 + Math.random() * 2);
+    }
+
+    ctx.fillStyle = "rgba(35,35,45,0.55)";
+    ctx.font = "bold 18px sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText("?", canvas.width / 2, canvas.height / 2 + 7);
+
+    scratchedMovesRef.current = 0;
+    revealSentRef.current = false;
+  }, []);
+
+  useEffect(() => {
+    paintScratchCover();
+  }, [paintScratchCover, prize.label, prize.symbol]);
+
+  useEffect(() => {
+    if (revealed) {
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) return;
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+    } else {
+      paintScratchCover();
+    }
+  }, [paintScratchCover, revealed]);
+
+  const scratch = useCallback(
+    (clientX: number, clientY: number) => {
+      if (disabled || revealed || revealSentRef.current) return;
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      if (!ctx) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const x = ((clientX - rect.left) / rect.width) * canvas.width;
+      const y = ((clientY - rect.top) / rect.height) * canvas.height;
+
+      ctx.globalCompositeOperation = "destination-out";
+      ctx.beginPath();
+      ctx.arc(x, y, 34, 0, Math.PI * 2);
+      ctx.fill();
+
+      scratchedMovesRef.current += 1;
+
+      // Non leggiamo i pixel a ogni micro-movimento: su telefono rallentava e sembrava non grattare.
+      if (scratchedMovesRef.current % 3 !== 0 && scratchedMovesRef.current < 10) return;
+
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      let transparent = 0;
+      for (let i = 3; i < imageData.data.length; i += 4) {
+        if (imageData.data[i] < 128) transparent++;
+      }
+      const pct = transparent / (canvas.width * canvas.height);
+
+      // Soglia piu bassa + failsafe: basta grattare un po', non serve pulire tutta la casella.
+      if (pct > 0.28 || scratchedMovesRef.current >= 14) {
+        revealSentRef.current = true;
+        onReveal();
+      }
+    },
+    [disabled, revealed, onReveal],
+  );
+
+  const stopDrawing = useCallback(() => {
+    isDrawingRef.current = false;
+  }, []);
 
   return (
-    <div ref={wrapRef} className="relative select-none" style={{ touchAction: "none" }}>
-      {/* Premi visibili sotto */}
-      <div className="grid grid-cols-3 gap-2 p-1">
-        {grid.map((prize, i) => (
-          <div
-            key={i}
-            className="flex flex-col items-center justify-center rounded-2xl border border-white/10 bg-black/40"
-            style={{ aspectRatio: "1" }}
-          >
-            <span className="text-3xl leading-none">{prize.symbol}</span>
-            <span className="mt-1 text-[10px] font-extrabold" style={{ color: prize.color }}>
-              {prize.label}
-            </span>
-          </div>
-        ))}
+    <div ref={cellRef} className="relative select-none overflow-hidden rounded-2xl" style={{ aspectRatio: "1" }}>
+      {/* Prize underneath */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 rounded-2xl border border-white/10">
+        <span className="text-3xl leading-none">{prize.symbol}</span>
+        <span className="mt-1 text-[10px] font-extrabold" style={{ color: prize.color }}>
+          {prize.label}
+        </span>
       </div>
 
-      {/* Canvas unico sopra tutta la griglia */}
-      <canvas
-        ref={canvasRef}
-        style={{
-          position:     "absolute",
-          inset:        0,
-          cursor:       "crosshair",
-          borderRadius: "1rem",
-          touchAction:  "none",
-        }}
-        onMouseDown={() => { isDrawing.current = true; }}
-        onMouseUp={()   => { isDrawing.current = false; }}
-        onMouseLeave={() => { isDrawing.current = false; }}
-        onMouseMove={(e) => { if (isDrawing.current) scratchAt(e.clientX, e.clientY); }}
-      />
+      {/* Scratch overlay */}
+      {!revealed && (
+        <canvas
+          ref={canvasRef}
+          width={140}
+          height={140}
+          className="absolute inset-0 h-full w-full cursor-crosshair rounded-2xl touch-none select-none"
+          style={{ WebkitUserSelect: "none", userSelect: "none", WebkitTouchCallout: "none" }}
+          onPointerDown={(e) => {
+            if (disabled) return;
+            isDrawingRef.current = true;
+            e.currentTarget.setPointerCapture?.(e.pointerId);
+            scratch(e.clientX, e.clientY);
+          }}
+          onPointerMove={(e) => {
+            if (!isDrawingRef.current) return;
+            e.preventDefault();
+            scratch(e.clientX, e.clientY);
+          }}
+          onPointerUp={stopDrawing}
+          onPointerCancel={stopDrawing}
+          onPointerLeave={stopDrawing}
+        />
+      )}
     </div>
   );
 }
-
 // ─── Main Page ────────────────────────────────────────────────
 function ScratchPage() {
   const { sfx } = useAudio();
@@ -561,13 +498,18 @@ function ScratchPage() {
               <Star className="h-6 w-6 text-gold animate-pulse" />
             </div>
 
-            {/* Griglia con canvas unico */}
-            <ScratchBoard
-              grid={grid}
-              revealed={revealed}
-              onRevealCell={handleReveal}
-              disabled={phase !== "playing"}
-            />
+            {/* 3x3 Grid */}
+            <div className="grid grid-cols-3 gap-2">
+              {grid.map((prize, i) => (
+                <ScratchCell
+                  key={i}
+                  prize={prize}
+                  revealed={revealed[i]}
+                  onReveal={() => handleReveal(i)}
+                  disabled={phase !== "playing"}
+                />
+              ))}
+            </div>
           </div>
 
           <div className="flex gap-2">
