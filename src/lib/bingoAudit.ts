@@ -1,4 +1,3 @@
-import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { BOTS } from "@/lib/bots";
 import { cardForRound, type RoomConfig } from "@/lib/rooms";
@@ -86,6 +85,7 @@ export async function recordBingoRoundAudit(params: {
       cardRows.push({
         id: cardId(id, uid, entry.slot),
         round_id: id,
+        room_id: room.id,
         user_id: uid,
         username: playerName,
         is_virtual: false,
@@ -103,6 +103,7 @@ export async function recordBingoRoundAudit(params: {
       cardRows.push({
         id: cardId(id, uid, 0),
         round_id: id,
+        room_id: room.id,
         user_id: uid,
         username: bot.name,
         is_virtual: true,
@@ -147,85 +148,4 @@ export async function recordBingoRoundAudit(params: {
   } catch (error) {
     console.warn("GameSpark: impossibile salvare audit Bingo", error);
   }
-}
-
-
-export type ServerBingoRoomState = {
-  roundId: string;
-  roomId: string;
-  roundIndex: number;
-  status: "waiting" | "running" | "ended" | string;
-  startedAt: string | null;
-  endedAt: string | null;
-  winnerUsername: string | null;
-  winnerIsVirtual: boolean;
-  draws: number[];
-};
-
-export function useServerBingoRoomState(roomId: string) {
-  const [state, setState] = useState<ServerBingoRoomState | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      try {
-        const { data: round, error: roundError } = await supabase
-          .from("gamespark_bingo_rounds" as any)
-          .select("id,room_id,round_index,status,started_at,ended_at,winner_username,winner_is_virtual")
-          .eq("room_id", roomId)
-          .order("round_index", { ascending: false })
-          .limit(1)
-          .maybeSingle();
-
-        if (roundError) throw roundError;
-        if (!round) {
-          if (!cancelled) setState(null);
-          return;
-        }
-
-        const { data: draws, error: drawsError } = await supabase
-          .from("gamespark_bingo_draws" as any)
-          .select("number_drawn,draw_order")
-          .eq("round_id", (round as any).id)
-          .order("draw_order", { ascending: true });
-
-        if (drawsError) throw drawsError;
-
-        if (!cancelled) {
-          setState({
-            roundId: (round as any).id,
-            roomId: (round as any).room_id,
-            roundIndex: Number((round as any).round_index),
-            status: (round as any).status,
-            startedAt: (round as any).started_at ?? null,
-            endedAt: (round as any).ended_at ?? null,
-            winnerUsername: (round as any).winner_username ?? null,
-            winnerIsVirtual: Boolean((round as any).winner_is_virtual),
-            draws: ((draws ?? []) as any[]).map((row) => Number(row.number_drawn)).filter((value) => Number.isFinite(value)),
-          });
-        }
-      } catch (error) {
-        console.warn("GameSpark: stato Bingo server non disponibile", error);
-        if (!cancelled) setState(null);
-      }
-    }
-
-    load();
-    const timer = window.setInterval(load, 5000);
-
-    const channel = supabase
-      .channel(`gamespark-bingo-room-state-${roomId}`)
-      .on("postgres_changes" as any, { event: "*", schema: "public", table: "gamespark_bingo_rounds" }, () => load())
-      .on("postgres_changes" as any, { event: "*", schema: "public", table: "gamespark_bingo_draws" }, () => load())
-      .subscribe();
-
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-      void supabase.removeChannel(channel);
-    };
-  }, [roomId]);
-
-  return state;
 }

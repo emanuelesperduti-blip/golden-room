@@ -28,7 +28,15 @@ import { useViewerGameState } from "@/hooks/useViewerGameState";
 import { BOTS, BotChatEngine } from "@/lib/bots";
 import { getBotConfigForRoom } from "@/lib/admin";
 import { formatRealWin, recordRealWin, useRecentWinHistory } from "@/lib/winHistory";
-import { recordBingoRoundAudit, useServerBingoRoomState } from "@/lib/bingoAudit";
+import { recordBingoRoundAudit } from "@/lib/bingoAudit";
+import {
+  ensureVirtualBingoCards,
+  loadRealBingoCards,
+  saveRealBingoCards,
+  updateRealBingoCardMarkedNumbers,
+  type PersistedBingoCard,
+  type PersistedVirtualBingoCard,
+} from "@/lib/bingoCards";
 
 const searchSchema = z.object({ roomId: z.string().optional() });
 
@@ -77,8 +85,9 @@ function getRoundOutcome(params: {
   playerName: string;
   playerCards: Array<{ slot: number }>;
   botCount: number;
+  virtualCards?: PersistedVirtualBingoCard[];
 }): RoundOutcome {
-  const { room, roundIndex, playerSeed, playerName, playerCards, botCount } = params;
+  const { room, roundIndex, playerSeed, playerName, playerCards, botCount, virtualCards = [] } = params;
   const drawOrder = drawOrderForRound(room, roundIndex);
   const maxDraws = maxDrawsForRoom(room);
   const candidates: RoundWinner[] = [];
@@ -92,10 +101,11 @@ function getRoundOutcome(params: {
 
   for (let i = 0; i < botCount; i++) {
     const bot = BOTS[i % BOTS.length];
-    const card = cardForRound(room, 100000 + i * 7919, roundIndex, 0);
+    const persistedCard = virtualCards.find((entry) => entry.userId === `virtual:${bot.name}` || entry.username === bot.name);
+    const card = persistedCard?.numbers?.length ? persistedCard.numbers : cardForRound(room, 100000 + i * 7919, roundIndex, 0);
     const drawIndex = getCompletionDrawIndex(card, drawOrder, maxDraws);
     if (drawIndex == null) continue;
-    candidates.push({ name: bot.name, avatar: bot.avatar, kind: "bot", cardSlot: null, drawIndex });
+    candidates.push({ name: bot.name, avatar: bot.avatar, kind: "bot", cardSlot: persistedCard?.slot ?? 0, drawIndex });
   }
 
   if (candidates.length === 0) return { drawIndex: null, winners: [] };
@@ -107,7 +117,7 @@ function getRoundOutcome(params: {
 }
 
 type ChatItem = { user: string; text: string; color: string; avatar: string };
-type PurchasedCardState = { roundIndex: number; slot: number; marked: number[] };
+type PurchasedCardState = PersistedBingoCard;
 type DisplayCard = PurchasedCardState & { key: string; card: number[]; markedSet: Set<number> };
 type CardInsight = DisplayCard & {
   bestMissing: number;
@@ -133,6 +143,7 @@ function readPersistedCards(storageKey: string, currentRoundIndex: number): Purc
         roundIndex: entry.roundIndex,
         slot: entry.slot,
         marked: entry.marked.filter((value: unknown) => typeof value === "number"),
+        numbers: Array.isArray(entry.numbers) ? entry.numbers.filter((value: unknown) => typeof value === "number") : undefined,
       }))
       .filter((entry) => entry.roundIndex >= currentRoundIndex);
   } catch {
@@ -153,7 +164,7 @@ function syncCardsWithDraws(
 
   const nextCards = cards.map((entry) => {
     if (entry.roundIndex !== activeRoundIndex) return entry;
-    const card = cardForRound(room, playerSeed, entry.roundIndex, entry.slot);
+    const card = entry.numbers?.length ? entry.numbers : cardForRound(room, playerSeed, entry.roundIndex, entry.slot);
     const autoMarked = card.filter((value) => value !== 0 && drawnSet.has(value));
     const merged = Array.from(new Set([...entry.marked, ...autoMarked])).sort((a, b) => a - b);
     if (merged.length === entry.marked.length && merged.every((value, idx) => value === entry.marked[idx])) {
@@ -263,6 +274,7 @@ function BingoPage() {
 
   const [now, setNow] = useState(() => Date.now());
   const [purchasedCards, setPurchasedCards] = useState<PurchasedCardState[]>([]);
+  const [virtualBingoCards, setVirtualBingoCards] = useState<PersistedVirtualBingoCard[]>([]);
   const [purchaseQty, setPurchaseQty] = useState(1);
   const [chatInput, setChatInput] = useState("");
   const [chatOpen, setChatOpen] = useState(false);
@@ -271,6 +283,7 @@ function BingoPage() {
   const [winnerNames, setWinnerNames] = useState<string[]>([]);
   const [winnerCardSlot, setWinnerCardSlot] = useState<number | null>(null);
   const [guestNotice, setGuestNotice] = useState<string | null>(null);
+  const [purchasePending, setPurchasePending] = useState(false);
   const [pageVisible, setPageVisible] = useState(() => typeof document === "undefined" || document.visibilityState === "visible");
   const [chat, setChat] = useState<ChatItem[]>([
     { user: "AlessioPro", text: "Chi è pronto? 🔥", color: "oklch(0.7 0.25 25)", avatar: "🎯" },
@@ -290,21 +303,9 @@ function BingoPage() {
   const speakTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const markTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const baseTimeline = getRoomTimeline(room, now);
-  const serverRound = useServerBingoRoomState(room.id);
-  const currentRoundIndex = serverRound?.roundIndex ?? baseTimeline.activeRoundIndex;
-  const upcomingRoundIndex = serverRound?.status === "ended" ? currentRoundIndex + 1 : baseTimeline.upcomingRoundIndex;
-  const timeline = useMemo(() => {
-    if (!serverRound) return baseTimeline;
-    const serverPhase = serverRound.status === "ended" ? "finished" : serverRound.status === "running" ? "playing" : "waiting";
-    return {
-      ...baseTimeline,
-      phase: serverPhase,
-      activeRoundIndex: currentRoundIndex,
-      upcomingRoundIndex,
-      phaseRemainingSec: serverPhase === "finished" ? Math.max(0, room.finishedSec) : baseTimeline.phaseRemainingSec,
-    };
-  }, [baseTimeline, serverRound, currentRoundIndex, upcomingRoundIndex, room.finishedSec]);
+  const timeline = getRoomTimeline(room, now);
+  const currentRoundIndex = timeline.activeRoundIndex;
+  const upcomingRoundIndex = timeline.upcomingRoundIndex;
   const maxCards = maxCardsPerRoom(room);
   const effectiveCardSize = room.cardSize;
   const isGuest = !user;
@@ -313,17 +314,15 @@ function BingoPage() {
   const botCount = botConfig.enabled ? botConfig.botCount : 0;
   const roomWinHistory = useRecentWinHistory(5, room.id);
 
-  const serverDraws = serverRound?.roundIndex === currentRoundIndex ? serverRound.draws : [];
-  const drawOrder = useMemo(() => {
-    const generated = drawOrderForRound(room, currentRoundIndex);
-    if (!serverDraws.length) return generated;
-    const seen = new Set(serverDraws);
-    return [...serverDraws, ...generated.filter((n) => !seen.has(n))];
-  }, [room, currentRoundIndex, serverDraws]);
+  const drawOrder = useMemo(() => drawOrderForRound(room, currentRoundIndex), [room, currentRoundIndex]);
 
   const currentReservations = useMemo(
     () => purchasedCards.filter((entry) => entry.roundIndex === currentRoundIndex).sort((a, b) => a.slot - b.slot),
     [purchasedCards, currentRoundIndex],
+  );
+  const currentVirtualCards = useMemo(
+    () => virtualBingoCards.filter((entry) => entry.roundIndex === currentRoundIndex),
+    [virtualBingoCards, currentRoundIndex],
   );
   const upcomingReservations = useMemo(
     () => purchasedCards.filter((entry) => entry.roundIndex === upcomingRoundIndex).sort((a, b) => a.slot - b.slot),
@@ -335,7 +334,7 @@ function BingoPage() {
       currentReservations.map((entry) => ({
         ...entry,
         key: cardKey(entry.roundIndex, entry.slot),
-        card: cardForRound(room, playerSeed, entry.roundIndex, entry.slot),
+        card: entry.numbers?.length ? entry.numbers : cardForRound(room, playerSeed, entry.roundIndex, entry.slot),
         markedSet: new Set(entry.marked),
       })),
     [currentReservations, room, playerSeed],
@@ -345,7 +344,7 @@ function BingoPage() {
       upcomingReservations.map((entry) => ({
         ...entry,
         key: cardKey(entry.roundIndex, entry.slot),
-        card: cardForRound(room, playerSeed, entry.roundIndex, entry.slot),
+        card: entry.numbers?.length ? entry.numbers : cardForRound(room, playerSeed, entry.roundIndex, entry.slot),
         markedSet: new Set(entry.marked),
       })),
     [upcomingReservations, room, playerSeed],
@@ -378,14 +377,10 @@ function BingoPage() {
     playerName: username,
     playerCards: currentReservations.map((entry) => ({ slot: entry.slot })),
     botCount,
-  }), [room, currentRoundIndex, playerSeed, username, currentReservations, botCount]);
+    virtualCards: currentVirtualCards,
+  }), [room, currentRoundIndex, playerSeed, username, currentReservations, botCount, currentVirtualCards]);
   const displayedWinnerNames = Array.from(new Set(
-    (serverRound?.status === "ended" && serverRound.winnerUsername
-      ? [serverRound.winnerUsername]
-      : winnerNames.length > 0
-        ? winnerNames
-        : currentRoundOutcome.winners.map((entry) => entry.name)
-    ).filter(Boolean),
+    (winnerNames.length > 0 ? winnerNames : currentRoundOutcome.winners.map((entry) => entry.name)).filter(Boolean),
   ));
   const finishedWinner = displayedWinnerNames.length > 0 ? displayedWinnerNames.join(", ") : null;
   const targetRound = timeline.phase === "waiting" ? currentRoundIndex : upcomingRoundIndex;
@@ -404,16 +399,11 @@ function BingoPage() {
     timeline.phase === "waiting" ? room.waitingSec : timeline.phase === "playing" ? 1 : room.finishedSec;
   const phaseProgress = timeline.phase === "playing" ? 100 : Math.min(100, Math.max(0, (timeline.phaseElapsedSec / Math.max(1, phaseDuration)) * 100));
 
-  const rawDrawCount = serverDraws.length > 0
-    ? serverDraws.length
-    : timeline.phase === "playing"
+  const rawDrawCount =
+    timeline.phase === "playing"
       ? Math.min(maxDrawsForRoom(room), Math.max(0, Math.floor((timeline.phaseElapsedSec * 1000) / room.drawIntervalMs)))
       : 0;
-  const winningDrawCount = serverRound?.status === "ended" && serverDraws.length > 0
-    ? serverDraws.length
-    : currentRoundOutcome.drawIndex != null
-      ? currentRoundOutcome.drawIndex + 1
-      : null;
+  const winningDrawCount = currentRoundOutcome.drawIndex != null ? currentRoundOutcome.drawIndex + 1 : null;
   const drawCount = winningDrawCount != null ? Math.min(rawDrawCount, winningDrawCount) : rawDrawCount;
   const drawnNumbers = drawOrder.slice(0, drawCount);
   const drawnNumber = drawCount > 0 ? drawnNumbers[drawCount - 1] : null;
@@ -424,7 +414,7 @@ function BingoPage() {
       ? "Prossima partita"
       : timeline.phase === "playing"
         ? "PARTITA IN CORSO"
-        : "RISULTATI ROUND";
+        : "FINE PARTITA";
   const bestCard = deckCards.length > 0 ? [...deckCards].sort((a, b) => a.bestMissing - b.bestMissing || b.matchedInBestLine - a.matchedInBestLine || a.slot - b.slot)[0] : null;
   const bestCardIndex = bestCard ? deckCards.findIndex((entry) => entry.key === bestCard.key) : -1;
 
@@ -529,12 +519,62 @@ function BingoPage() {
   }, [botConfig.enabled, botConfig.chatPace, botConfig.reactionSpeed, botCount]);
 
   useEffect(() => {
+    if (!user?.id || !botConfig.enabled || botCount <= 0) {
+      setVirtualBingoCards([]);
+      return;
+    }
+
+    let cancelled = false;
+    const botsForRoom = BOTS.slice(0, botCount);
+
+    async function prepareVirtualCards() {
+      try {
+        const roundsToPrepare = Array.from(new Set([currentRoundIndex, upcomingRoundIndex]));
+        const loaded = (await Promise.all(
+          roundsToPrepare.map((roundIndex) => ensureVirtualBingoCards({ room, roundIndex, bots: botsForRoom })),
+        )).flat();
+        if (cancelled) return;
+        setVirtualBingoCards(loaded.filter((entry) => entry.roundIndex >= currentRoundIndex));
+      } catch (error) {
+        console.warn("GameSpark: impossibile preparare cartelle virtuali Bingo", error);
+      }
+    }
+
+    void prepareVirtualCards();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, botConfig.enabled, botCount, currentRoundIndex, upcomingRoundIndex, room.id, room.maxNumber, room.cardSize]);
+
+  useEffect(() => {
     if (isGuest) {
       setPurchasedCards([]);
       return;
     }
-    setPurchasedCards(readPersistedCards(storageKey, currentRoundIndex));
-  }, [storageKey, currentRoundIndex, isGuest]);
+
+    let cancelled = false;
+    const localFallback = readPersistedCards(storageKey, currentRoundIndex);
+    setPurchasedCards(localFallback);
+
+    async function loadCardsFromDatabase() {
+      if (!user?.id) return;
+      try {
+        const roundsToLoad = Array.from(new Set([currentRoundIndex, upcomingRoundIndex]));
+        const loaded = (await Promise.all(
+          roundsToLoad.map((roundIndex) => loadRealBingoCards({ roomId: room.id, roundIndex, userId: user.id })),
+        )).flat();
+        if (cancelled) return;
+        setPurchasedCards(loaded.filter((entry) => entry.roundIndex >= currentRoundIndex));
+      } catch (error) {
+        console.warn("GameSpark: impossibile caricare cartelle Bingo dal database", error);
+      }
+    }
+
+    void loadCardsFromDatabase();
+    return () => {
+      cancelled = true;
+    };
+  }, [storageKey, currentRoundIndex, upcomingRoundIndex, room.id, user?.id, isGuest]);
 
   useEffect(() => {
     if (typeof window === "undefined" || isGuest) return;
@@ -756,15 +796,26 @@ function BingoPage() {
     if (!currentCard || !currentCard.card.includes(n)) return;
 
     sfx("tap");
+    const nextMarked = currentCard.markedSet.has(n)
+      ? currentCard.marked.filter((value) => value !== n)
+      : [...currentCard.marked, n];
+
     setPurchasedCards((prev) =>
       prev.map((entry) => {
         if (entry.roundIndex !== currentRoundIndex || entry.slot !== cardSlot) return entry;
-        const nextMarked = entry.marked.includes(n)
-          ? entry.marked.filter((value) => value !== n)
-          : [...entry.marked, n];
         return { ...entry, marked: nextMarked };
       }),
     );
+
+    if (user?.id) {
+      void updateRealBingoCardMarkedNumbers({
+        roomId: room.id,
+        roundIndex: currentRoundIndex,
+        userId: user.id,
+        slot: cardSlot,
+        marked: nextMarked,
+      }).catch((error) => console.warn("GameSpark: impossibile aggiornare numeri marcati Bingo", error));
+    }
   }
 
   function navigateWithStop(path: "/lobby" | "/shop" | "/auth" | "/missions" | "/reveal") {
@@ -778,7 +829,7 @@ function BingoPage() {
     void navigate({ to: "/auth" });
   }
 
-  function reserveCards() {
+  async function reserveCards() {
     if (isGuest) {
       setGuestNotice("Modalità osservatore attiva: accedi per comprare cartelle e partecipare ai round.");
       sfx("error");
@@ -813,27 +864,61 @@ function BingoPage() {
     if (qty <= 0) return;
     const totalTickets = isFreeRoom ? 0 : qty * room.ticketCost;
 
-    if (totalTickets > 0 && !spendTickets(totalTickets)) {
-      sfx("tap");
-      navigateWithStop("/shop");
-      return;
-    }
+    if (purchasePending) return;
+    setPurchasePending(true);
 
-    const usedSlots = new Set(purchasedCards.filter((entry) => entry.roundIndex === targetRound).map((entry) => entry.slot));
-    const additions: PurchasedCardState[] = [];
-    let slot = 0;
-    while (additions.length < qty && slot < maxCards + qty + 2) {
-      if (!usedSlots.has(slot)) {
-        usedSlots.add(slot);
-        additions.push({ roundIndex: targetRound, slot, marked: [] });
+    try {
+      const dbCards = user?.id ? await loadRealBingoCards({ roomId: room.id, roundIndex: targetRound, userId: user.id }) : [];
+      const usedSlots = new Set([
+        ...purchasedCards.filter((entry) => entry.roundIndex === targetRound).map((entry) => entry.slot),
+        ...dbCards.map((entry) => entry.slot),
+      ]);
+      const additions: PurchasedCardState[] = [];
+      let slot = 0;
+      while (additions.length < qty && slot < maxCards + qty + 2) {
+        if (!usedSlots.has(slot)) {
+          usedSlots.add(slot);
+          additions.push({
+            roundIndex: targetRound,
+            slot,
+            marked: [],
+            numbers: cardForRound(room, playerSeed, targetRound, slot),
+          });
+        }
+        slot += 1;
       }
-      slot += 1;
+
+      if (additions.length === 0) return;
+
+      const persistedCards = user?.id
+        ? await saveRealBingoCards({
+            room,
+            roundIndex: targetRound,
+            userId: user.id,
+            username,
+            playerSeed,
+            cards: additions.map((entry) => ({ slot: entry.slot })),
+          })
+        : additions;
+
+      if (totalTickets > 0 && !spendTickets(totalTickets)) {
+        sfx("tap");
+        navigateWithStop("/shop");
+        return;
+      }
+
+      sfx("coin");
+      setPurchasedCards((prev) => {
+        const otherRounds = prev.filter((entry) => entry.roundIndex !== targetRound);
+        return [...otherRounds, ...persistedCards].sort((a, b) => a.roundIndex - b.roundIndex || a.slot - b.slot);
+      });
+    } catch (error) {
+      console.warn("GameSpark: impossibile salvare cartelle Bingo nel database", error);
+      setGuestNotice("Non riesco a salvare le cartelle nel database. Nessun ticket è stato scalato.");
+      sfx("error");
+    } finally {
+      setPurchasePending(false);
     }
-
-    if (additions.length === 0) return;
-
-    sfx("coin");
-    setPurchasedCards((prev) => [...prev, ...additions]);
   }
 
   function sendChat() {
@@ -1251,7 +1336,7 @@ function BingoPage() {
             <button
               type="button"
               onClick={isGuest ? () => goToAuth() : reserveCards}
-              disabled={timeline.phase === "finished" || (!isGuest && availableSlots === 0) || (!isGuest && room.ticketCost > 0 && !canBuyAny)}
+              disabled={purchasePending || timeline.phase === "finished" || (!isGuest && availableSlots === 0) || (!isGuest && room.ticketCost > 0 && !canBuyAny)}
               className="rounded-2xl bg-gold-shine px-4 py-3 text-sm font-extrabold text-purple-deep shadow-button-gold disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isGuest
@@ -1260,6 +1345,8 @@ function BingoPage() {
                   ? "Turno in chiusura"
                   : availableSlots === 0
                     ? "Limite cartelle raggiunto"
+                    : purchasePending
+                      ? "Salvataggio..."
                     : room.ticketCost === 0
                       ? `Blocca ${purchaseQty} ${purchaseQty === 1 ? "cartella" : "cartelle"} gratis`
                       : `${timeline.phase === "waiting" ? "Acquista" : "Prenota"} ${purchaseQty} ${purchaseQty === 1 ? "cartella" : "cartelle"} · ${totalCost}T`}
