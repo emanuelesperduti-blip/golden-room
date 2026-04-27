@@ -69,15 +69,15 @@ export const ROOMS: RoomConfig[] = [
     subtitle: "Free room — perfetta per iniziare",
     img: nightBingo,
     tier: "free",
-    cycleSec: 406,      // 180 + safety max 90 estrazioni x 2400ms + 10
+    cycleSec: 329,      // 180 + 144 + 5
     waitingSec: 180,
-    playingSec: 216,    // finestra massima: il round si chiude prima quando c'e BINGO
-    finishedSec: 10,
+    playingSec: 144,    // 60 numeri × 2 400ms = 144 000ms esatti
+    finishedSec: 5,
     drawIntervalMs: 2400,
     ticketCost: 0,
     sparkReward: 6,
     ticketReward: 0,
-    maxNumber: 90,
+    maxNumber: 60,
     cardSize: 3,
     badges: ["new", "free"],
     accent: "from-[oklch(0.74_0.18_150)] to-[oklch(0.45_0.18_160)]",
@@ -89,15 +89,15 @@ export const ROOMS: RoomConfig[] = [
     subtitle: "Veloce, divertente, infinito",
     img: nightBingo,
     tier: "standard",
-    cycleSec: 397,      // 180 + safety max 90 estrazioni x 2300ms + 10
+    cycleSec: 358,      // 180 + 173 + 5
     waitingSec: 180,
-    playingSec: 207,    // finestra massima: il round si chiude prima quando c'e BINGO
-    finishedSec: 10,
+    playingSec: 173,    // 75 numeri × 2 300ms = 172 500ms → ceil → 173
+    finishedSec: 5,
     drawIntervalMs: 2300,
     ticketCost: 1,
     sparkReward: 14,
     ticketReward: 1,
-    maxNumber: 90,
+    maxNumber: 75,
     cardSize: 5,
     badges: ["live", "hot"],
     accent: "from-[oklch(0.62_0.28_350)] to-[oklch(0.4_0.22_320)]",
@@ -109,10 +109,10 @@ export const ROOMS: RoomConfig[] = [
     subtitle: "La room dei big winners",
     img: goldenCity,
     tier: "premium",
-    cycleSec: 424,      // 180 + safety max 90 estrazioni x 2600ms + 10
+    cycleSec: 419,      // 180 + 234 + 5
     waitingSec: 180,
     playingSec: 234,    // 90 numeri × 2 600ms = 234 000ms esatti
-    finishedSec: 10,
+    finishedSec: 5,
     drawIntervalMs: 2600,
     ticketCost: 2,
     sparkReward: 36,
@@ -129,10 +129,10 @@ export const ROOMS: RoomConfig[] = [
     subtitle: "Solo per i veri Re — reward x3",
     img: vipCrown,
     tier: "vip",
-    cycleSec: 442,      // 180 + safety max 90 estrazioni x 2800ms + 10
+    cycleSec: 437,      // 180 + 252 + 5
     waitingSec: 180,
     playingSec: 252,    // 90 numeri × 2 800ms = 252 000ms esatti
-    finishedSec: 10,
+    finishedSec: 5,
     drawIntervalMs: 2800,
     ticketCost: 5,
     sparkReward: 90,
@@ -149,10 +149,10 @@ export const ROOMS: RoomConfig[] = [
     subtitle: "Una partita ogni 10 minuti, jackpot enorme",
     img: vipCrown,
     tier: "jackpot",
-    cycleSec: 454,      // 210 + safety max 90 estrazioni x 2600ms + 10
+    cycleSec: 449,      // 210 + 234 + 5
     waitingSec: 210,
     playingSec: 234,    // 90 numeri × 2 600ms = 234 000ms esatti
-    finishedSec: 10,
+    finishedSec: 5,
     drawIntervalMs: 2600,
     ticketCost: 10,
     sparkReward: 300,
