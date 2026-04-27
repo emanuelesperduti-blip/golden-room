@@ -261,22 +261,45 @@ function endedAtForDraw(room, roundIndex, drawCount) {
   return new Date(EPOCH + roundIndex * room.cycleSec * 1000 + room.waitingSec * 1000 + drawCount * room.drawIntervalMs).toISOString();
 }
 
+function dedupeBy(rows, getKey) {
+  const map = new Map();
+  for (const row of rows) {
+    const key = getKey(row);
+    if (!key) continue;
+    map.set(key, row);
+  }
+  return Array.from(map.values());
+}
+
 async function upsert(table, rows, onConflict) {
   const arr = Array.isArray(rows) ? rows : [rows];
   if (!arr.length) return;
-  const { error } = await supabase.from(table).upsert(arr, onConflict ? { onConflict } : undefined);
+
+  const conflictColumns = onConflict
+    ? onConflict.split(',').map((value) => value.trim()).filter(Boolean)
+    : ['id'];
+
+  const cleanRows = dedupeBy(arr, (row) => conflictColumns.map((column) => String(row[column] ?? '')).join('|'));
+  if (!cleanRows.length) return;
+
+  const { error } = await supabase.from(table).upsert(cleanRows, onConflict ? { onConflict } : undefined);
   if (error) throw error;
 }
 
 async function insertMissingWinRows(roundIdValue, rows) {
   if (!rows.length) return;
+
+  const cleanRows = dedupeBy(rows, (row) => `${row.source_round_id}|${row.user_id}|${row.game_type}`);
+  if (!cleanRows.length) return;
+
   const { data, error } = await supabase
     .from('gamespark_win_history')
     .select('user_id,game_type')
     .eq('source_round_id', roundIdValue);
   if (error) throw error;
+
   const existing = new Set((data || []).map((row) => `${row.user_id}|${row.game_type}`));
-  const missing = rows.filter((row) => !existing.has(`${row.user_id}|${row.game_type}`));
+  const missing = cleanRows.filter((row) => !existing.has(`${row.user_id}|${row.game_type}`));
   if (missing.length) {
     const { error: insertError } = await supabase.from('gamespark_win_history').insert(missing);
     if (insertError) throw insertError;
@@ -293,7 +316,7 @@ async function processRoomRound(room, roundIndex, availableDrawCount) {
 
   for (let i = 0; i < virtualCount; i++) {
     const bot = BOTS[i % BOTS.length];
-    const userId = `virtual:${bot.name}`;
+    const userId = `virtual:${bot.name}:${i}`;
     const numbers = cardForRound(room, 100000 + i * 7919, roundIndex, 0);
     const completeAt = completionDrawIndex(numbers, draws);
     cards.push({ bot, userId, numbers, completeAt });
@@ -330,7 +353,7 @@ async function processRoomRound(room, roundIndex, availableDrawCount) {
     draw_order: index + 1,
     created_at: endedAtForDraw(room, roundIndex, index + 1),
   }));
-  await upsert('gamespark_bingo_draws', drawRows, 'id');
+  await upsert('gamespark_bingo_draws', drawRows, 'round_id,number_drawn');
 
   const cardRows = cards.map(({ bot, userId, numbers }) => ({
     id: cardId(id, userId, 0),
@@ -422,6 +445,6 @@ async function safeTick() {
   }
 }
 
-console.log(`[bingo-engine] Avviato. Intervallo ${ENGINE_INTERVAL_MS}ms. Room: ${ROOMS.map((r) => r.id).join(', ')}`);
+console.log(`[bingo-engine] Avviato. Intervallo ${ENGINE_INTERVAL_MS}ms. Room: ${ROOMS.map((r) => r.id).join(', ')}. Duplicate-safe.`);
 void safeTick();
 setInterval(() => void safeTick(), ENGINE_INTERVAL_MS);
