@@ -1,7 +1,7 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { motion, AnimatePresence } from "framer-motion";
 import { Flame, Ticket, Sparkles, ChevronRight, Zap, Trophy, CheckCircle2, ShoppingBag, Star } from "lucide-react";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import confetti from "canvas-confetti";
 import { MobileShell } from "@/components/game/MobileShell";
 import { GameButton } from "@/components/game/GameButton";
@@ -16,9 +16,9 @@ import sparkIcon from "@/assets/icon-spark.png";
 import { useGameStore, MISSIONS_CONFIG } from "@/lib/gameStore";
 import { useAuth } from "@/hooks/useAuth";
 import { useViewerGameState } from "@/hooks/useViewerGameState";
-import { BOTS, recentBotWins } from "@/lib/bots";
 import { ROOMS as BOT_ROOMS } from "@/lib/rooms";
 import { useAudio } from "@/hooks/useAudio";
+import { formatRealWin, useRecentWinHistory } from "@/lib/winHistory";
 
 export const Route = createFileRoute("/")(
   {
@@ -374,53 +374,33 @@ function HomePage() {
 
 // ─── Community Feed ───────────────────────────────────────────
 function CommunityFeed() {
-  const ROOMS_NAMES = BOT_ROOMS.map((r) => r.name);
-  const [items, setItems] = useState(() =>
-    BOTS.slice(0, 3).map((b, i) => ({
-      id: i,
-      bot: b,
-      room: ROOMS_NAMES[i % ROOMS_NAMES.length],
-      action: ["sta giocando in", "ha vinto in", "è entrato in"][i % 3],
-    }))
-  );
-  const idRef = useRef(10);
-
-  useEffect(() => {
-    const schedule = () => {
-      const delay = 5000 + Math.random() * 8000;
-      return setTimeout(() => {
-        const bot = BOTS[Math.floor(Math.random() * BOTS.length)];
-        const room = ROOMS_NAMES[Math.floor(Math.random() * ROOMS_NAMES.length)];
-        const actions = ["sta giocando in", "ha vinto in", "è entrato in", "ha aperto un Reveal in"];
-        const action = actions[Math.floor(Math.random() * actions.length)];
-        setItems((prev) => [
-          { id: idRef.current++, bot, room, action },
-          ...prev.slice(0, 4),
-        ]);
-        t = schedule();
-      }, delay);
-    };
-    let t = schedule();
-    return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  const wins = useRecentWinHistory(5);
 
   return (
     <div className="space-y-0 divide-y divide-white/5">
-      {items.map((item) => (
-        <div key={item.id} className="flex items-center gap-2.5 px-3 py-2.5">
-          <span className="text-xl shrink-0">{item.bot.avatar}</span>
-          <div className="min-w-0 flex-1">
-            <span className="text-xs font-extrabold" style={{ color: item.bot.color }}>{item.bot.name}</span>
-            <span className="text-xs text-white/50"> {item.action} </span>
-            <span className="text-xs font-bold text-white/80">{item.room}</span>
+      {wins.length > 0 ? (
+        wins.map((win) => (
+          <div key={win.id} className="flex items-center gap-2.5 px-3 py-2.5">
+            <span className="text-xl shrink-0">🏆</span>
+            <div className="min-w-0 flex-1">
+              <span className="text-xs font-extrabold text-gold">{win.username}</span>
+              <span className="text-xs text-white/50"> ha vinto </span>
+              <span className="text-xs font-bold text-white/80">
+                {win.prize_label || formatRealWin(win)}
+              </span>
+            </div>
+            <span className="text-[10px] text-white/30 shrink-0">live</span>
           </div>
-          <span className="text-[10px] text-white/30 shrink-0">ora</span>
+        ))
+      ) : (
+        <div className="px-3 py-3 text-xs font-bold text-white/45">
+          Le ultime vincite appariranno appena il motore Bingo registra nuovi risultati.
         </div>
-      ))}
+      )}
     </div>
   );
 }
+
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex items-center justify-center gap-2">
