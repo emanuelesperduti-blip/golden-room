@@ -28,7 +28,7 @@ import { useViewerGameState } from "@/hooks/useViewerGameState";
 import { BOTS, BotChatEngine } from "@/lib/bots";
 import { getBotConfigForRoom } from "@/lib/admin";
 import { formatRealWin, recordRealWin, useRecentWinHistory } from "@/lib/winHistory";
-import { recordBingoRoundAudit } from "@/lib/bingoAudit";
+import { recordBingoRoundAudit, useServerBingoRoomState } from "@/lib/bingoAudit";
 
 const searchSchema = z.object({ roomId: z.string().optional() });
 
@@ -290,9 +290,21 @@ function BingoPage() {
   const speakTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const markTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const timeline = getRoomTimeline(room, now);
-  const currentRoundIndex = timeline.activeRoundIndex;
-  const upcomingRoundIndex = timeline.upcomingRoundIndex;
+  const baseTimeline = getRoomTimeline(room, now);
+  const serverRound = useServerBingoRoomState(room.id);
+  const currentRoundIndex = serverRound?.roundIndex ?? baseTimeline.activeRoundIndex;
+  const upcomingRoundIndex = serverRound?.status === "ended" ? currentRoundIndex + 1 : baseTimeline.upcomingRoundIndex;
+  const timeline = useMemo(() => {
+    if (!serverRound) return baseTimeline;
+    const serverPhase = serverRound.status === "ended" ? "finished" : serverRound.status === "running" ? "playing" : "waiting";
+    return {
+      ...baseTimeline,
+      phase: serverPhase,
+      activeRoundIndex: currentRoundIndex,
+      upcomingRoundIndex,
+      phaseRemainingSec: serverPhase === "finished" ? Math.max(0, room.finishedSec) : baseTimeline.phaseRemainingSec,
+    };
+  }, [baseTimeline, serverRound, currentRoundIndex, upcomingRoundIndex, room.finishedSec]);
   const maxCards = maxCardsPerRoom(room);
   const effectiveCardSize = room.cardSize;
   const isGuest = !user;
@@ -301,7 +313,13 @@ function BingoPage() {
   const botCount = botConfig.enabled ? botConfig.botCount : 0;
   const roomWinHistory = useRecentWinHistory(5, room.id);
 
-  const drawOrder = useMemo(() => drawOrderForRound(room, currentRoundIndex), [room, currentRoundIndex]);
+  const serverDraws = serverRound?.roundIndex === currentRoundIndex ? serverRound.draws : [];
+  const drawOrder = useMemo(() => {
+    const generated = drawOrderForRound(room, currentRoundIndex);
+    if (!serverDraws.length) return generated;
+    const seen = new Set(serverDraws);
+    return [...serverDraws, ...generated.filter((n) => !seen.has(n))];
+  }, [room, currentRoundIndex, serverDraws]);
 
   const currentReservations = useMemo(
     () => purchasedCards.filter((entry) => entry.roundIndex === currentRoundIndex).sort((a, b) => a.slot - b.slot),
@@ -362,7 +380,12 @@ function BingoPage() {
     botCount,
   }), [room, currentRoundIndex, playerSeed, username, currentReservations, botCount]);
   const displayedWinnerNames = Array.from(new Set(
-    (winnerNames.length > 0 ? winnerNames : currentRoundOutcome.winners.map((entry) => entry.name)).filter(Boolean),
+    (serverRound?.status === "ended" && serverRound.winnerUsername
+      ? [serverRound.winnerUsername]
+      : winnerNames.length > 0
+        ? winnerNames
+        : currentRoundOutcome.winners.map((entry) => entry.name)
+    ).filter(Boolean),
   ));
   const finishedWinner = displayedWinnerNames.length > 0 ? displayedWinnerNames.join(", ") : null;
   const targetRound = timeline.phase === "waiting" ? currentRoundIndex : upcomingRoundIndex;
@@ -381,11 +404,16 @@ function BingoPage() {
     timeline.phase === "waiting" ? room.waitingSec : timeline.phase === "playing" ? 1 : room.finishedSec;
   const phaseProgress = timeline.phase === "playing" ? 100 : Math.min(100, Math.max(0, (timeline.phaseElapsedSec / Math.max(1, phaseDuration)) * 100));
 
-  const rawDrawCount =
-    timeline.phase === "playing"
+  const rawDrawCount = serverDraws.length > 0
+    ? serverDraws.length
+    : timeline.phase === "playing"
       ? Math.min(maxDrawsForRoom(room), Math.max(0, Math.floor((timeline.phaseElapsedSec * 1000) / room.drawIntervalMs)))
       : 0;
-  const winningDrawCount = currentRoundOutcome.drawIndex != null ? currentRoundOutcome.drawIndex + 1 : null;
+  const winningDrawCount = serverRound?.status === "ended" && serverDraws.length > 0
+    ? serverDraws.length
+    : currentRoundOutcome.drawIndex != null
+      ? currentRoundOutcome.drawIndex + 1
+      : null;
   const drawCount = winningDrawCount != null ? Math.min(rawDrawCount, winningDrawCount) : rawDrawCount;
   const drawnNumbers = drawOrder.slice(0, drawCount);
   const drawnNumber = drawCount > 0 ? drawnNumbers[drawCount - 1] : null;
@@ -396,7 +424,7 @@ function BingoPage() {
       ? "Prossima partita"
       : timeline.phase === "playing"
         ? "PARTITA IN CORSO"
-        : "FINE PARTITA";
+        : "RISULTATI ROUND";
   const bestCard = deckCards.length > 0 ? [...deckCards].sort((a, b) => a.bestMissing - b.bestMissing || b.matchedInBestLine - a.matchedInBestLine || a.slot - b.slot)[0] : null;
   const bestCardIndex = bestCard ? deckCards.findIndex((entry) => entry.key === bestCard.key) : -1;
 
