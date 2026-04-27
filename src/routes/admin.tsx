@@ -235,7 +235,6 @@ function AdminPage() {
           <>
             <section className="mt-4 grid grid-cols-2 gap-3">
               <KpiCard icon={<UserRound className="h-5 w-5" />} label="Utenti reali online" value={realUsersNow.toString()} accent="cyan" />
-              <KpiCard icon={<Bot className="h-5 w-5" />} label="Bot attivi" value={activeBots.toString()} accent="violet" />
               <KpiCard icon={<Users className="h-5 w-5" />} label="Totale partecipanti" value={connectedNow.toString()} accent="gold" />
               <KpiCard icon={<Activity className="h-5 w-5" />} label="Partite attive" value={activeGames.toString()} accent="pink" />
             </section>
@@ -279,7 +278,7 @@ function AdminPage() {
                     <div className="min-w-0">
                       <p className="truncate text-sm font-extrabold text-white">{room.name}</p>
                       <p className="mt-1 text-[11px] font-bold text-white/55">
-                        {realUsers + bots} in sala · {realUsers} reali · {bots} bot · fase {phaseLabel(timeline.phase)}
+                        {realUsers + bots} in sala · {realUsers} reali · {bots} virtuali · fase {phaseLabel(timeline.phase)}
                       </p>
                     </div>
                     <div className="rounded-full border border-white/10 bg-white/5 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-white/65">
@@ -367,90 +366,6 @@ function AdminPage() {
         {/* Step 12: Logs Tab */}
         {activeTab === "logs" && <LogsTab activityLogs={activityLogs} getActivityLogs={getActivityLogs} />}
         {activeTab === "update" && <UpdateTab />}
-
-        {/* Bot Management Section */}
-        <section className="mt-4 rounded-[28px] border border-white/10 bg-card-game p-4 shadow-card-game">
-          <div className="flex items-center gap-2">
-            <SlidersHorizontal className="h-5 w-5 text-gold" />
-            <p className="text-sm font-black text-white">Gestione bot per room</p>
-          </div>
-          <p className="mt-1 text-[11px] font-bold text-white/55">Configura quantità bot, frequenza chat e velocità di reazione per ogni room.</p>
-          <div className="mt-3 space-y-3">
-            {roomsState.map(({ room, roomConfig }) => (
-              <div key={room.id} className="rounded-3xl border border-white/8 bg-black/20 p-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div>
-                    <p className="text-sm font-extrabold text-white">{room.name}</p>
-                    <p className="mt-1 text-[11px] font-bold text-white/50">I bot vincono solo per fortuna su cartelle reali. Nessun vantaggio speciale.</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => updateRoomConfig(room.id, { enabled: !roomConfig.enabled })}
-                    className={`rounded-full px-3 py-1.5 text-[10px] font-extrabold uppercase tracking-[0.14em] ${
-                      roomConfig.enabled ? "border border-emerald-300/25 bg-emerald-400/15 text-emerald-100" : "border border-white/10 bg-white/5 text-white/50"
-                    }`}
-                  >
-                    {roomConfig.enabled ? "Bot ON" : "Bot OFF"}
-                  </button>
-                </div>
-
-                <div className="mt-3 grid grid-cols-1 gap-3">
-                  <label className="block">
-                    <div className="mb-1 flex items-center justify-between text-[11px] font-bold text-white/60">
-                      <span className="inline-flex items-center gap-1.5">
-                        <Bot className="h-3.5 w-3.5" /> Bot attivi
-                      </span>
-                      <span>{roomConfig.enabled ? roomConfig.botCount : 0}</span>
-                    </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={50}
-                      value={roomConfig.botCount}
-                      disabled={!roomConfig.enabled}
-                      onChange={(e) => updateRoomConfig(room.id, { botCount: Number(e.target.value) })}
-                      className="w-full accent-yellow-400 disabled:opacity-40"
-                    />
-                  </label>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <label className="block rounded-2xl border border-white/8 bg-white/5 p-2.5">
-                      <div className="mb-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-white/60">
-                        <MessageSquareText className="h-3.5 w-3.5" /> Chat
-                      </div>
-                      <select
-                        value={roomConfig.chatPace}
-                        disabled={!roomConfig.enabled}
-                        onChange={(e) => updateRoomConfig(room.id, { chatPace: e.target.value as ChatPace })}
-                        className="w-full rounded-xl border border-white/10 bg-black/30 px-2 py-2 text-xs font-bold text-white outline-none disabled:opacity-40"
-                      >
-                        <option value="bassa">Bassa</option>
-                        <option value="media">Media</option>
-                        <option value="alta">Alta</option>
-                      </select>
-                    </label>
-
-                    <label className="block rounded-2xl border border-white/8 bg-white/5 p-2.5">
-                      <div className="mb-2 inline-flex items-center gap-1.5 text-[11px] font-bold text-white/60">
-                        <Rabbit className="h-3.5 w-3.5" /> Reazione
-                      </div>
-                      <select
-                        value={roomConfig.reactionSpeed}
-                        disabled={!roomConfig.enabled}
-                        onChange={(e) => updateRoomConfig(room.id, { reactionSpeed: e.target.value as ReactionSpeed })}
-                        className="w-full rounded-xl border border-white/10 bg-black/30 px-2 py-2 text-xs font-bold text-white outline-none disabled:opacity-40"
-                      >
-                        <option value="lenta">Lenta</option>
-                        <option value="normale">Normale</option>
-                        <option value="rapida">Rapida</option>
-                      </select>
-                    </label>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
 
         <section className="mt-4 rounded-[28px] border border-dashed border-gold/30 bg-[linear-gradient(180deg,rgba(245,180,0,0.08),rgba(20,12,30,0.72))] p-4 text-center shadow-card-game">
           <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-gold-shine text-purple-deep shadow-button-gold">
@@ -633,7 +548,7 @@ function RoomsTab({
             <div className="flex items-center justify-between mb-4">
               <p className="text-sm font-black text-white">{room.name}</p>
               <span className={`rounded-full border px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-[0.14em] ${bc.enabled ? "border-emerald-300/40 bg-emerald-400/15 text-emerald-200" : "border-red-300/30 bg-red-400/10 text-red-200"}`}>
-                Bot {bc.enabled ? "ON" : "OFF"}
+                Virtuali {bc.enabled ? "ON" : "OFF"}
               </span>
             </div>
 
@@ -653,14 +568,23 @@ function RoomsTab({
                 />
               </label>
 
+              <div className="rounded-2xl border border-emerald-300/20 bg-emerald-400/10 px-3 py-3">
+                <p className="text-xs font-extrabold text-emerald-100">Fine partita automatica</p>
+                <p className="mt-1 text-[11px] font-bold leading-relaxed text-white/60">
+                  La partita non ha una durata manuale: termina solo quando una cartella completa una combinazione vincente reale.
+                </p>
+              </div>
+
               <label className="block">
-                <p className="text-xs font-bold text-white/60 mb-2">Durata partita (secondi)</p>
+                <p className="text-xs font-bold text-white/60 mb-2">Velocità estrazione numeri (ms)</p>
                 <input
                   type="number"
-                  defaultValue={room.playingSec}
+                  min={800}
+                  step={100}
+                  defaultValue={room.drawIntervalMs}
                   onChange={(e) => {
-                    setRoomConfig(room.id, { gameDuration: Number(e.target.value) });
-                    addActivityLog({ type: "admin_action", roomId: room.id, details: { action: "update_room_duration", value: Number(e.target.value) }, severity: "info" });
+                    setRoomConfig(room.id, { drawSpeed: Number(e.target.value) });
+                    addActivityLog({ type: "admin_action", roomId: room.id, details: { action: "update_draw_speed", value: Number(e.target.value) }, severity: "info" });
                   }}
                   className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-sm font-bold text-white outline-none"
                 />
@@ -693,15 +617,15 @@ function RoomsTab({
               </label>
             </div>
 
-            {/* ── Configurazione Bot ── */}
+            {/* ── Configurazione utenti virtuali ── */}
             <div className="rounded-2xl border border-white/8 bg-black/20 p-3 space-y-3">
-              <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-white/40">Configurazione bot</p>
+              <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-white/40">Configurazione utenti virtuali</p>
 
               {/* Enabled toggle */}
               <div className="flex items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs font-bold text-white">Bot attivi</p>
-                  <p className="text-[11px] font-bold text-white/50">Abilita/disabilita bot per questa room</p>
+                  <p className="text-xs font-bold text-white">Utenti virtuali attivi</p>
+                  <p className="text-[11px] font-bold text-white/50">Abilita/disabilita utenti virtuali per questa room</p>
                 </div>
                 <button
                   type="button"
@@ -718,7 +642,7 @@ function RoomsTab({
               {/* Bot count */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <p className="text-xs font-bold text-white">Numero bot</p>
+                  <p className="text-xs font-bold text-white">Numero utenti virtuali</p>
                   <span className="rounded-full border border-white/15 bg-black/20 px-2 py-0.5 text-xs font-extrabold text-gold">{bc.botCount}</span>
                 </div>
                 <input
@@ -740,7 +664,7 @@ function RoomsTab({
 
               {/* Chat pace */}
               <div>
-                <p className="text-xs font-bold text-white mb-2">Frequenza chat bot</p>
+                <p className="text-xs font-bold text-white mb-2">Frequenza chat utenti virtuali</p>
                 <div className="grid grid-cols-2 gap-1.5">
                   {(["bassa", "media", "alta"] as const).map((pace) => (
                     <button
@@ -761,7 +685,7 @@ function RoomsTab({
 
               {/* Reaction speed */}
               <div>
-                <p className="text-xs font-bold text-white mb-2">Velocità reazione bot</p>
+                <p className="text-xs font-bold text-white mb-2">Velocità reazione utenti virtuali</p>
                 <div className="grid grid-cols-3 gap-1.5">
                   {(["lenta", "normale", "rapida"] as const).map((speed) => (
                     <button
@@ -784,7 +708,7 @@ function RoomsTab({
               <div className="rounded-xl border border-white/8 bg-black/20 px-3 py-2">
                 <p className="text-[10px] font-extrabold uppercase tracking-[0.12em] text-white/40 mb-1">Stato effettivo in lobby</p>
                 <p className="text-xs font-bold text-white">
-                  {bc.enabled ? `${bc.botCount} bot attivi` : "Nessun bot"} · chat {bc.chatPace} · reazione {bc.reactionSpeed}
+                  {bc.enabled ? `${bc.botCount} utenti virtuali attivi` : "Nessun utente virtuale"} · chat {bc.chatPace} · reazione {bc.reactionSpeed}
                 </p>
               </div>
             </div>

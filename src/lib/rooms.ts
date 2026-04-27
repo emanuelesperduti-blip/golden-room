@@ -15,7 +15,7 @@ export interface RoomConfig {
   cycleSec: number;
   /** countdown / presale window before the round actually starts */
   waitingSec: number;
-  /** visible playing window */
+  /** playing window calculated from maxNumber × drawIntervalMs; not manually configurable */
   playingSec: number;
   /** brief settlement / winner validation window */
   finishedSec: number;
@@ -57,15 +57,10 @@ export interface RoomTimeline {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// NOTA: playingSec deve coprire TUTTE le estrazioni: maxNumber × drawIntervalMs
-//   neon-newcomer : 60 × 2400ms = 144 000ms → playingSec = 144
-//   night-rush    : 75 × 2300ms = 172 500ms → playingSec = 173 (ceil)
-//   golden-city   : 90 × 2600ms = 234 000ms → playingSec = 234
-//   royal-vip     : 90 × 2800ms = 252 000ms → playingSec = 252
-//   mega-jackpot  : 90 × 2600ms = 234 000ms → playingSec = 234
-// Questo garantisce che TUTTI i numeri vengano estratti in ogni partita e che
-// ci sia SEMPRE un vincitore, rendendo funzionale sia la modale BINGO sia la
-// cronologia vittorie nella lobby.
+// NOTA: il Bingo non ha una “durata partita” amministrabile.
+// La fase di gioco copre le estrazioni necessarie e il round si conclude quando
+// una cartella completa una combinazione vincente reale. L’admin può cambiare
+// solo il ritmo di estrazione tramite drawIntervalMs.
 // ─────────────────────────────────────────────────────────────────────────────
 export const ROOMS: RoomConfig[] = [
   {
@@ -185,18 +180,20 @@ export function getRoom(id: string | undefined): RoomConfig {
       const adminData = JSON.parse(window.localStorage.getItem("golden-room-admin-v1") || "{}");
       const overrides = adminData.state?.roomConfigs?.[baseRoom.id];
       if (overrides) {
+        const waitingSec = overrides.countdownDuration ?? baseRoom.waitingSec;
+        const drawIntervalMs = overrides.drawSpeed ?? baseRoom.drawIntervalMs;
+        const playingSec = Math.ceil((baseRoom.maxNumber * drawIntervalMs) / 1000);
+
         return {
           ...baseRoom,
-          waitingSec: overrides.countdownDuration ?? baseRoom.waitingSec,
-          playingSec: overrides.gameDuration ?? baseRoom.playingSec,
+          waitingSec,
+          playingSec,
           ticketCost: overrides.ticketCost ?? baseRoom.ticketCost,
           sparkReward: overrides.sparkReward ?? baseRoom.sparkReward,
           ticketReward: overrides.ticketReward ?? baseRoom.ticketReward,
-          drawIntervalMs: overrides.drawSpeed ?? baseRoom.drawIntervalMs,
-          // Recalculate cycleSec if timings changed
-          cycleSec: (overrides.countdownDuration ?? baseRoom.waitingSec) + 
-                    (overrides.gameDuration ?? baseRoom.playingSec) + 
-                    baseRoom.finishedSec
+          drawIntervalMs,
+          // La durata gioco non è configurabile: deriva dal ritmo di estrazione.
+          cycleSec: waitingSec + playingSec + baseRoom.finishedSec,
         };
       }
     } catch (e) {
@@ -262,10 +259,8 @@ export function secondsToNextRound(room: RoomConfig, now = Date.now()): number {
 
 /**
  * Numero massimo di estrazioni per una partita.
- * DEVE essere uguale a room.maxNumber: solo estraendo TUTTI i numeri si
- * garantisce che ogni round abbia sempre un vincitore e che la modale BINGO
- * e la cronologia lobby funzionino correttamente.
- * Il playingSec di ogni room è calibrato esattamente per coprire queste estrazioni.
+ * Non è un timer di chiusura: serve solo a definire il pool massimo di numeri.
+ * Il round termina quando una cartella completa una combinazione vincente reale.
  */
 export function maxDrawsForRoom(room: RoomConfig): number {
   return room.maxNumber;

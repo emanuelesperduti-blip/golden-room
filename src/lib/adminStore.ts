@@ -17,7 +17,8 @@ export interface CurrencyConfig {
 
 export interface RoomConfigOverride {
   countdownDuration: number;
-  gameDuration: number;
+  /** Deprecated: la durata partita non è più configurabile. */
+  gameDuration?: number;
   ticketCost: number;
   sparkReward: number;
   maxCardsPerUser: number;
