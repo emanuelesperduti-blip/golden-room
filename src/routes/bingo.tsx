@@ -296,8 +296,8 @@ function BingoPage() {
   const isGuest = !user;
   const storageKey = useMemo(() => getBingoStorageKey(room.id, user?.id ?? null), [room.id, user?.id]);
   const botConfig = useMemo(() => getBotConfigForRoom(room.id), [room.id]);
-  const roomRealWins = useRecentWinHistory(5, room.id);
   const botCount = botConfig.enabled ? botConfig.botCount : 0;
+  const roomWinHistory = useRecentWinHistory(5, room.id);
 
   const drawOrder = useMemo(() => drawOrderForRound(room, currentRoundIndex), [room, currentRoundIndex]);
 
@@ -359,24 +359,6 @@ function BingoPage() {
     playerCards: currentReservations.map((entry) => ({ slot: entry.slot })),
     botCount,
   }), [room, currentRoundIndex, playerSeed, username, currentReservations, botCount]);
-  const recentResults = useMemo(() => {
-    const settledRound = timeline.phase === "finished" ? currentRoundIndex : currentRoundIndex - 1;
-    return Array.from({ length: 3 }, (_, idx) => settledRound - idx)
-      .filter((roundIndex) => roundIndex >= 0)
-      .map((roundIndex) => ({
-        roundIndex,
-        winners: getRoundOutcome({
-          room,
-          roundIndex,
-          playerSeed,
-          playerName: username,
-          playerCards: [],
-          botCount: botCount,
-        }).winners,
-      }))
-      .filter((entry) => entry.winners.length > 0);
-  }, [timeline.phase, currentRoundIndex, room, playerSeed, username, botCount]);
-
   const displayedWinnerNames = Array.from(new Set(
     (winnerNames.length > 0 ? winnerNames : currentRoundOutcome.winners.map((entry) => entry.name)).filter(Boolean),
   ));
@@ -647,10 +629,21 @@ function BingoPage() {
         }
       } catch (e) {}
 
-      addSparks(Math.floor(sparkReward));
-      addTickets(Math.floor(ticketReward));
+      const finalSparkReward = Math.floor(sparkReward);
+      const finalTicketReward = Math.floor(ticketReward);
+      addSparks(finalSparkReward);
+      addTickets(finalTicketReward);
       incrementBingosWon();
-      void recordRealWin({ user, username, roomId: room.id, roomName: room.name, gameType: "bingo", prizeLabel: `+${Math.floor(sparkReward)} Spark · +${Math.floor(ticketReward)} Ticket`, sparkReward: Math.floor(sparkReward), ticketReward: Math.floor(ticketReward) });
+      void recordRealWin({
+        user,
+        username,
+        roomId: room.id,
+        roomName: room.name,
+        gameType: "bingo",
+        prizeLabel: [`+${finalSparkReward} Spark`, finalTicketReward > 0 ? `+${finalTicketReward} Ticket` : ""].filter(Boolean).join(" · "),
+        sparkReward: finalSparkReward,
+        ticketReward: finalTicketReward,
+      });
     }
     confetti({
       particleCount: 240,
@@ -658,7 +651,7 @@ function BingoPage() {
       origin: { y: 0.55 },
       colors: ["#ff3da6", "#f5b400", "#7c3aed", "#22d3ee", "#34d399"],
     });
-  }, [currentRoundOutcome, drawCount, currentRoundIndex, sfx, addSparks, addTickets, incrementBingosWon, room.sparkReward, room.ticketReward]);
+  }, [currentRoundOutcome, drawCount, currentRoundIndex, sfx, addSparks, addTickets, incrementBingosWon, room.sparkReward, room.ticketReward, room.id, room.name, user, username]);
 
   useEffect(() => {
     return () => {
@@ -1070,18 +1063,18 @@ function BingoPage() {
           </div>
 
           <div className="mt-3 space-y-2">
-            {roomRealWins.slice(0, 5).map((win) => (
-              <div key={win.id} className="flex items-center justify-between gap-3 rounded-2xl border border-gold/25 bg-gold/10 px-3 py-2">
-                <div className="flex items-center gap-2">
+            {roomWinHistory.slice(0, 5).map((win) => (
+              <div key={win.id} className="flex items-center justify-between gap-3 rounded-2xl border border-white/8 bg-black/20 px-3 py-2">
+                <div className="flex min-w-0 items-center gap-2">
                   <span className="text-lg">🏆</span>
-                  <div>
-                    <p className="text-xs font-extrabold text-white">{win.username}</p>
-                    <p className="text-[11px] font-bold text-white/55">{formatRealWin(win)}</p>
+                  <div className="min-w-0">
+                    <p className="truncate text-xs font-extrabold text-white">{win.username}</p>
+                    <p className="truncate text-[11px] font-bold text-white/55">{formatRealWin(win)}</p>
                   </div>
                 </div>
-                <div className="text-right">
-                  <p className="text-xs font-extrabold text-gold">{win.prize_label || "Vincita reale"}</p>
-                  <p className="text-[11px] font-bold text-white/55">live</p>
+                <div className="shrink-0 text-right">
+                  <p className="text-xs font-extrabold text-gold">{win.prize_label || [`+${win.spark_reward} Spark`, win.ticket_reward > 0 ? `+${win.ticket_reward} Ticket` : ""].filter(Boolean).join(" · ")}</p>
+                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/45">{win.is_bot ? "Live" : "Reale"}</p>
                 </div>
               </div>
             ))}
