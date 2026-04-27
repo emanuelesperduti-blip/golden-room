@@ -29,14 +29,6 @@ import { BOTS, BotChatEngine } from "@/lib/bots";
 import { getBotConfigForRoom } from "@/lib/admin";
 import { formatRealWin, recordRealWin, useRecentWinHistory } from "@/lib/winHistory";
 import { recordBingoRoundAudit } from "@/lib/bingoAudit";
-import {
-  ensureVirtualBingoCards,
-  loadRealBingoCards,
-  saveRealBingoCards,
-  updateRealBingoCardMarkedNumbers,
-  type PersistedBingoCard,
-  type PersistedVirtualBingoCard,
-} from "@/lib/bingoCards";
 
 const searchSchema = z.object({ roomId: z.string().optional() });
 
@@ -85,9 +77,8 @@ function getRoundOutcome(params: {
   playerName: string;
   playerCards: Array<{ slot: number }>;
   botCount: number;
-  virtualCards?: PersistedVirtualBingoCard[];
 }): RoundOutcome {
-  const { room, roundIndex, playerSeed, playerName, playerCards, botCount, virtualCards = [] } = params;
+  const { room, roundIndex, playerSeed, playerName, playerCards, botCount } = params;
   const drawOrder = drawOrderForRound(room, roundIndex);
   const maxDraws = maxDrawsForRoom(room);
   const candidates: RoundWinner[] = [];
@@ -101,11 +92,10 @@ function getRoundOutcome(params: {
 
   for (let i = 0; i < botCount; i++) {
     const bot = BOTS[i % BOTS.length];
-    const persistedCard = virtualCards.find((entry) => entry.userId === `virtual:${bot.name}` || entry.username === bot.name);
-    const card = persistedCard?.numbers?.length ? persistedCard.numbers : cardForRound(room, 100000 + i * 7919, roundIndex, 0);
+    const card = cardForRound(room, 100000 + i * 7919, roundIndex, 0);
     const drawIndex = getCompletionDrawIndex(card, drawOrder, maxDraws);
     if (drawIndex == null) continue;
-    candidates.push({ name: bot.name, avatar: bot.avatar, kind: "bot", cardSlot: persistedCard?.slot ?? 0, drawIndex });
+    candidates.push({ name: bot.name, avatar: bot.avatar, kind: "bot", cardSlot: null, drawIndex });
   }
 
   if (candidates.length === 0) return { drawIndex: null, winners: [] };
@@ -117,7 +107,7 @@ function getRoundOutcome(params: {
 }
 
 type ChatItem = { user: string; text: string; color: string; avatar: string };
-type PurchasedCardState = PersistedBingoCard;
+type PurchasedCardState = { roundIndex: number; slot: number; marked: number[] };
 type DisplayCard = PurchasedCardState & { key: string; card: number[]; markedSet: Set<number> };
 type CardInsight = DisplayCard & {
   bestMissing: number;
@@ -143,7 +133,6 @@ function readPersistedCards(storageKey: string, currentRoundIndex: number): Purc
         roundIndex: entry.roundIndex,
         slot: entry.slot,
         marked: entry.marked.filter((value: unknown) => typeof value === "number"),
-        numbers: Array.isArray(entry.numbers) ? entry.numbers.filter((value: unknown) => typeof value === "number") : undefined,
       }))
       .filter((entry) => entry.roundIndex >= currentRoundIndex);
   } catch {
@@ -164,7 +153,7 @@ function syncCardsWithDraws(
 
   const nextCards = cards.map((entry) => {
     if (entry.roundIndex !== activeRoundIndex) return entry;
-    const card = entry.numbers?.length ? entry.numbers : cardForRound(room, playerSeed, entry.roundIndex, entry.slot);
+    const card = cardForRound(room, playerSeed, entry.roundIndex, entry.slot);
     const autoMarked = card.filter((value) => value !== 0 && drawnSet.has(value));
     const merged = Array.from(new Set([...entry.marked, ...autoMarked])).sort((a, b) => a - b);
     if (merged.length === entry.marked.length && merged.every((value, idx) => value === entry.marked[idx])) {
@@ -274,7 +263,6 @@ function BingoPage() {
 
   const [now, setNow] = useState(() => Date.now());
   const [purchasedCards, setPurchasedCards] = useState<PurchasedCardState[]>([]);
-  const [virtualBingoCards, setVirtualBingoCards] = useState<PersistedVirtualBingoCard[]>([]);
   const [purchaseQty, setPurchaseQty] = useState(1);
   const [chatInput, setChatInput] = useState("");
   const [chatOpen, setChatOpen] = useState(false);
@@ -283,7 +271,6 @@ function BingoPage() {
   const [winnerNames, setWinnerNames] = useState<string[]>([]);
   const [winnerCardSlot, setWinnerCardSlot] = useState<number | null>(null);
   const [guestNotice, setGuestNotice] = useState<string | null>(null);
-  const [purchasePending, setPurchasePending] = useState(false);
   const [pageVisible, setPageVisible] = useState(() => typeof document === "undefined" || document.visibilityState === "visible");
   const [chat, setChat] = useState<ChatItem[]>([
     { user: "AlessioPro", text: "Chi è pronto? 🔥", color: "oklch(0.7 0.25 25)", avatar: "🎯" },
@@ -320,10 +307,6 @@ function BingoPage() {
     () => purchasedCards.filter((entry) => entry.roundIndex === currentRoundIndex).sort((a, b) => a.slot - b.slot),
     [purchasedCards, currentRoundIndex],
   );
-  const currentVirtualCards = useMemo(
-    () => virtualBingoCards.filter((entry) => entry.roundIndex === currentRoundIndex),
-    [virtualBingoCards, currentRoundIndex],
-  );
   const upcomingReservations = useMemo(
     () => purchasedCards.filter((entry) => entry.roundIndex === upcomingRoundIndex).sort((a, b) => a.slot - b.slot),
     [purchasedCards, upcomingRoundIndex],
@@ -334,7 +317,7 @@ function BingoPage() {
       currentReservations.map((entry) => ({
         ...entry,
         key: cardKey(entry.roundIndex, entry.slot),
-        card: entry.numbers?.length ? entry.numbers : cardForRound(room, playerSeed, entry.roundIndex, entry.slot),
+        card: cardForRound(room, playerSeed, entry.roundIndex, entry.slot),
         markedSet: new Set(entry.marked),
       })),
     [currentReservations, room, playerSeed],
@@ -344,7 +327,7 @@ function BingoPage() {
       upcomingReservations.map((entry) => ({
         ...entry,
         key: cardKey(entry.roundIndex, entry.slot),
-        card: entry.numbers?.length ? entry.numbers : cardForRound(room, playerSeed, entry.roundIndex, entry.slot),
+        card: cardForRound(room, playerSeed, entry.roundIndex, entry.slot),
         markedSet: new Set(entry.marked),
       })),
     [upcomingReservations, room, playerSeed],
@@ -377,8 +360,7 @@ function BingoPage() {
     playerName: username,
     playerCards: currentReservations.map((entry) => ({ slot: entry.slot })),
     botCount,
-    virtualCards: currentVirtualCards,
-  }), [room, currentRoundIndex, playerSeed, username, currentReservations, botCount, currentVirtualCards]);
+  }), [room, currentRoundIndex, playerSeed, username, currentReservations, botCount]);
   const displayedWinnerNames = Array.from(new Set(
     (winnerNames.length > 0 ? winnerNames : currentRoundOutcome.winners.map((entry) => entry.name)).filter(Boolean),
   ));
@@ -519,62 +501,12 @@ function BingoPage() {
   }, [botConfig.enabled, botConfig.chatPace, botConfig.reactionSpeed, botCount]);
 
   useEffect(() => {
-    if (!user?.id || !botConfig.enabled || botCount <= 0) {
-      setVirtualBingoCards([]);
-      return;
-    }
-
-    let cancelled = false;
-    const botsForRoom = BOTS.slice(0, botCount);
-
-    async function prepareVirtualCards() {
-      try {
-        const roundsToPrepare = Array.from(new Set([currentRoundIndex, upcomingRoundIndex]));
-        const loaded = (await Promise.all(
-          roundsToPrepare.map((roundIndex) => ensureVirtualBingoCards({ room, roundIndex, bots: botsForRoom })),
-        )).flat();
-        if (cancelled) return;
-        setVirtualBingoCards(loaded.filter((entry) => entry.roundIndex >= currentRoundIndex));
-      } catch (error) {
-        console.warn("GameSpark: impossibile preparare cartelle virtuali Bingo", error);
-      }
-    }
-
-    void prepareVirtualCards();
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id, botConfig.enabled, botCount, currentRoundIndex, upcomingRoundIndex, room.id, room.maxNumber, room.cardSize]);
-
-  useEffect(() => {
     if (isGuest) {
       setPurchasedCards([]);
       return;
     }
-
-    let cancelled = false;
-    const localFallback = readPersistedCards(storageKey, currentRoundIndex);
-    setPurchasedCards(localFallback);
-
-    async function loadCardsFromDatabase() {
-      if (!user?.id) return;
-      try {
-        const roundsToLoad = Array.from(new Set([currentRoundIndex, upcomingRoundIndex]));
-        const loaded = (await Promise.all(
-          roundsToLoad.map((roundIndex) => loadRealBingoCards({ roomId: room.id, roundIndex, userId: user.id })),
-        )).flat();
-        if (cancelled) return;
-        setPurchasedCards(loaded.filter((entry) => entry.roundIndex >= currentRoundIndex));
-      } catch (error) {
-        console.warn("GameSpark: impossibile caricare cartelle Bingo dal database", error);
-      }
-    }
-
-    void loadCardsFromDatabase();
-    return () => {
-      cancelled = true;
-    };
-  }, [storageKey, currentRoundIndex, upcomingRoundIndex, room.id, user?.id, isGuest]);
+    setPurchasedCards(readPersistedCards(storageKey, currentRoundIndex));
+  }, [storageKey, currentRoundIndex, isGuest]);
 
   useEffect(() => {
     if (typeof window === "undefined" || isGuest) return;
@@ -796,26 +728,15 @@ function BingoPage() {
     if (!currentCard || !currentCard.card.includes(n)) return;
 
     sfx("tap");
-    const nextMarked = currentCard.markedSet.has(n)
-      ? currentCard.marked.filter((value) => value !== n)
-      : [...currentCard.marked, n];
-
     setPurchasedCards((prev) =>
       prev.map((entry) => {
         if (entry.roundIndex !== currentRoundIndex || entry.slot !== cardSlot) return entry;
+        const nextMarked = entry.marked.includes(n)
+          ? entry.marked.filter((value) => value !== n)
+          : [...entry.marked, n];
         return { ...entry, marked: nextMarked };
       }),
     );
-
-    if (user?.id) {
-      void updateRealBingoCardMarkedNumbers({
-        roomId: room.id,
-        roundIndex: currentRoundIndex,
-        userId: user.id,
-        slot: cardSlot,
-        marked: nextMarked,
-      }).catch((error) => console.warn("GameSpark: impossibile aggiornare numeri marcati Bingo", error));
-    }
   }
 
   function navigateWithStop(path: "/lobby" | "/shop" | "/auth" | "/missions" | "/reveal") {
@@ -829,7 +750,7 @@ function BingoPage() {
     void navigate({ to: "/auth" });
   }
 
-  async function reserveCards() {
+  function reserveCards() {
     if (isGuest) {
       setGuestNotice("Modalità osservatore attiva: accedi per comprare cartelle e partecipare ai round.");
       sfx("error");
@@ -864,61 +785,27 @@ function BingoPage() {
     if (qty <= 0) return;
     const totalTickets = isFreeRoom ? 0 : qty * room.ticketCost;
 
-    if (purchasePending) return;
-    setPurchasePending(true);
-
-    try {
-      const dbCards = user?.id ? await loadRealBingoCards({ roomId: room.id, roundIndex: targetRound, userId: user.id }) : [];
-      const usedSlots = new Set([
-        ...purchasedCards.filter((entry) => entry.roundIndex === targetRound).map((entry) => entry.slot),
-        ...dbCards.map((entry) => entry.slot),
-      ]);
-      const additions: PurchasedCardState[] = [];
-      let slot = 0;
-      while (additions.length < qty && slot < maxCards + qty + 2) {
-        if (!usedSlots.has(slot)) {
-          usedSlots.add(slot);
-          additions.push({
-            roundIndex: targetRound,
-            slot,
-            marked: [],
-            numbers: cardForRound(room, playerSeed, targetRound, slot),
-          });
-        }
-        slot += 1;
-      }
-
-      if (additions.length === 0) return;
-
-      const persistedCards = user?.id
-        ? await saveRealBingoCards({
-            room,
-            roundIndex: targetRound,
-            userId: user.id,
-            username,
-            playerSeed,
-            cards: additions.map((entry) => ({ slot: entry.slot })),
-          })
-        : additions;
-
-      if (totalTickets > 0 && !spendTickets(totalTickets)) {
-        sfx("tap");
-        navigateWithStop("/shop");
-        return;
-      }
-
-      sfx("coin");
-      setPurchasedCards((prev) => {
-        const otherRounds = prev.filter((entry) => entry.roundIndex !== targetRound);
-        return [...otherRounds, ...persistedCards].sort((a, b) => a.roundIndex - b.roundIndex || a.slot - b.slot);
-      });
-    } catch (error) {
-      console.warn("GameSpark: impossibile salvare cartelle Bingo nel database", error);
-      setGuestNotice("Non riesco a salvare le cartelle nel database. Nessun ticket è stato scalato.");
-      sfx("error");
-    } finally {
-      setPurchasePending(false);
+    if (totalTickets > 0 && !spendTickets(totalTickets)) {
+      sfx("tap");
+      navigateWithStop("/shop");
+      return;
     }
+
+    const usedSlots = new Set(purchasedCards.filter((entry) => entry.roundIndex === targetRound).map((entry) => entry.slot));
+    const additions: PurchasedCardState[] = [];
+    let slot = 0;
+    while (additions.length < qty && slot < maxCards + qty + 2) {
+      if (!usedSlots.has(slot)) {
+        usedSlots.add(slot);
+        additions.push({ roundIndex: targetRound, slot, marked: [] });
+      }
+      slot += 1;
+    }
+
+    if (additions.length === 0) return;
+
+    sfx("coin");
+    setPurchasedCards((prev) => [...prev, ...additions]);
   }
 
   function sendChat() {
@@ -951,7 +838,6 @@ function BingoPage() {
         </button>
         <div className="flex flex-col items-center text-center">
           <h2 className="text-stroke-thin text-base font-extrabold uppercase text-gold">{room.name}</h2>
-          <span className="text-[10px] font-extrabold uppercase tracking-wider text-cyan-100/90">Bingo {room.maxNumber} numeri</span>
           <span className="flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-white/70">
             {timeline.phase === "waiting" && (
               <>
@@ -966,7 +852,9 @@ function BingoPage() {
             )}
           </span>
         </div>
-        <div className="w-9" />
+        <div className="flex justify-end">
+          <RoomNumberPill value={room.maxNumber} compact />
+        </div>
       </div>
 
       {isGuest && (
@@ -1035,6 +923,9 @@ function BingoPage() {
       </section>
 
       <div className="relative z-10 mt-1 px-4 text-center">
+        <div className="mb-2">
+          <RoomNumberPill value={room.maxNumber} />
+        </div>
         <span className="text-stroke-thin text-xl font-extrabold italic text-white/90">{heroTitle}</span>
         <p className="mt-1 text-sm font-bold text-white/70">
           {timeline.phase === "waiting" &&
@@ -1187,7 +1078,6 @@ function BingoPage() {
         <div className="grid grid-cols-2 gap-2">
           <StatusCard icon={<Ticket className="h-4 w-4" />} title="Costo/cartella" value={room.ticketCost === 0 ? "Gratis" : `${room.ticketCost} Ticket`} />
           <StatusCard icon={<Trophy className="h-4 w-4" />} title="Premio finale" value={`+${room.sparkReward} Spark · +${room.ticketReward} Ticket`} />
-          <StatusCard icon={<TimerReset className="h-4 w-4" />} title="Tipo partita" value={`Bingo ${room.maxNumber} numeri`} />
           <StatusCard icon={<Clock className="h-4 w-4" />} title="Stato" value={timeline.phase === "waiting" ? "Prevendita" : timeline.phase === "playing" ? "Live" : "Chiusura"} />
           <StatusCard icon={<TimerReset className="h-4 w-4" />} title="Max cartelle" value={`${maxCards} per round`} />
         </div>
@@ -1338,7 +1228,7 @@ function BingoPage() {
             <button
               type="button"
               onClick={isGuest ? () => goToAuth() : reserveCards}
-              disabled={purchasePending || timeline.phase === "finished" || (!isGuest && availableSlots === 0) || (!isGuest && room.ticketCost > 0 && !canBuyAny)}
+              disabled={timeline.phase === "finished" || (!isGuest && availableSlots === 0) || (!isGuest && room.ticketCost > 0 && !canBuyAny)}
               className="rounded-2xl bg-gold-shine px-4 py-3 text-sm font-extrabold text-purple-deep shadow-button-gold disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isGuest
@@ -1347,8 +1237,6 @@ function BingoPage() {
                   ? "Turno in chiusura"
                   : availableSlots === 0
                     ? "Limite cartelle raggiunto"
-                    : purchasePending
-                      ? "Salvataggio..."
                     : room.ticketCost === 0
                       ? `Blocca ${purchaseQty} ${purchaseQty === 1 ? "cartella" : "cartelle"} gratis`
                       : `${timeline.phase === "waiting" ? "Acquista" : "Prenota"} ${purchaseQty} ${purchaseQty === 1 ? "cartella" : "cartelle"} · ${totalCost}T`}
@@ -1721,6 +1609,29 @@ function BingoCardPanel({
           })}
         </div>
       </div>
+    </div>
+  );
+}
+
+
+function RoomNumberPill({ value, compact = false }: { value: number; compact?: boolean }) {
+  return (
+    <div
+      className={`inline-flex items-center gap-1.5 rounded-full border border-white/20 bg-black/25 text-white shadow-[0_10px_22px_rgba(0,0,0,0.28)] backdrop-blur-sm ${compact ? "px-1.5 py-1" : "px-2 py-1.5"}`}
+      style={{ boxShadow: "0 10px 22px rgba(0,0,0,0.28), 0 0 18px rgba(255,255,255,0.08)" }}
+    >
+      <span
+        className={`grid shrink-0 place-items-center rounded-full border border-white/75 font-black text-purple-deep ${compact ? "h-7 w-7 text-[12px]" : "h-8 w-8 text-[13px]"}`}
+        style={{
+          background: "radial-gradient(circle at 32% 28%, #fffdf4 0%, #fff2b8 18%, #ffd863 44%, #f59e0b 68%, #d97706 100%)",
+          boxShadow: "inset 0 2px 2px rgba(255,255,255,0.75), 0 2px 10px rgba(245,158,11,0.55)",
+        }}
+      >
+        {value}
+      </span>
+      <span className={`pr-1 font-extrabold uppercase tracking-[0.14em] text-white/95 ${compact ? "text-[9px]" : "text-[10px]"}`}>
+        numeri
+      </span>
     </div>
   );
 }

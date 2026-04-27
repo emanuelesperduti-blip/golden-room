@@ -294,6 +294,29 @@ function LobbyPage() {
   );
 }
 
+
+function NumberModeBadge({ value, compact = false }: { value: number; compact?: boolean }) {
+  return (
+    <div
+      className={`inline-flex items-center gap-1.5 rounded-full border border-white/25 bg-black/25 text-white shadow-[0_10px_22px_rgba(0,0,0,0.28)] backdrop-blur-sm ${compact ? "px-1.5 py-1" : "px-1.5 py-1.5"}`}
+      style={{ boxShadow: "0 10px 22px rgba(0,0,0,0.28), 0 0 20px rgba(255,255,255,0.08)" }}
+    >
+      <span
+        className={`grid shrink-0 place-items-center rounded-full border border-white/75 font-black text-purple-deep ${compact ? "h-7 w-7 text-[12px]" : "h-8 w-8 text-[13px]"}`}
+        style={{
+          background: "radial-gradient(circle at 32% 28%, #fffdf4 0%, #fff2b8 18%, #ffd863 44%, #f59e0b 68%, #d97706 100%)",
+          boxShadow: "inset 0 2px 2px rgba(255,255,255,0.75), 0 2px 10px rgba(245,158,11,0.55)",
+        }}
+      >
+        {value}
+      </span>
+      <span className={`pr-1 font-extrabold uppercase tracking-[0.14em] text-white/95 ${compact ? "text-[9px]" : "text-[10px]"}`}>
+        numeri
+      </span>
+    </div>
+  );
+}
+
 function RoomCard({ room, delay, index }: { room: RoomConfig; delay: number; index: number }) {
   const roomRealWins = useRecentWinHistory(1, room.id);
   const { sfx } = useAudio();
@@ -343,6 +366,9 @@ function RoomCard({ room, delay, index }: { room: RoomConfig; delay: number; ind
           className={`relative overflow-hidden rounded-3xl border bg-gradient-to-br ${room.accent} p-3.5 shadow-card-game border-white/15`}
         >
           <div className="pointer-events-none absolute -right-8 -top-8 h-32 w-32 rounded-full bg-white/15 blur-2xl" />
+          <div className="absolute right-3 top-3 z-10">
+            <NumberModeBadge value={room.maxNumber} />
+          </div>
 
           <div className="flex items-center gap-3">
             <motion.img
@@ -372,9 +398,6 @@ function RoomCard({ room, delay, index }: { room: RoomConfig; delay: number; ind
                 </span>
                 <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-black/30 px-2 py-0.5 whitespace-nowrap">
                   <Ticket className="h-3 w-3" /> {canReserve}
-                </span>
-                <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-black/30 px-2 py-0.5 whitespace-nowrap">
-                  Bingo {room.maxNumber} numeri
                 </span>
                 <span className="flex min-w-0 shrink-0 items-center gap-0.5 rounded-full bg-black/30 px-2 py-0.5 whitespace-nowrap leading-none">
                   <Flame className="h-3 w-3 text-gold" /> +{room.sparkReward}
