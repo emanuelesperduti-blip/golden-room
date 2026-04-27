@@ -253,16 +253,12 @@ function prizeLabel(room) {
   ].filter(Boolean).join(' · ');
 }
 
-function startedAtForRound(room, roundIndex, override) {
-  if (override) return new Date(override).toISOString();
+function startedAtForRound(room, roundIndex) {
   return new Date(EPOCH + roundIndex * room.cycleSec * 1000 + room.waitingSec * 1000).toISOString();
 }
 
-function endedAtForDraw(room, roundIndex, drawCount, startedAtOverride) {
-  const startMs = startedAtOverride
-    ? new Date(startedAtOverride).getTime()
-    : EPOCH + roundIndex * room.cycleSec * 1000 + room.waitingSec * 1000;
-  return new Date(startMs + drawCount * room.drawIntervalMs).toISOString();
+function endedAtForDraw(room, roundIndex, drawCount) {
+  return new Date(EPOCH + roundIndex * room.cycleSec * 1000 + room.waitingSec * 1000 + drawCount * room.drawIntervalMs).toISOString();
 }
 
 function dedupeBy(rows, getKey) {
@@ -310,7 +306,7 @@ async function insertMissingWinRows(roundIdValue, rows) {
   }
 }
 
-async function processRoomRound(room, roundIndex, availableDrawCount, startedAtOverride) {
+async function processRoomRound(room, roundIndex, availableDrawCount) {
   const id = roundId(room.id, roundIndex);
   const draws = drawOrderForRound(room, roundIndex);
   const count = Math.max(0, Math.min(room.maxNumber, availableDrawCount));
@@ -346,8 +342,8 @@ async function processRoomRound(room, roundIndex, availableDrawCount, startedAtO
     winning_card_id: hasWinner ? cardId(id, winners[0].userId, 0) : null,
     spark_reward: room.sparkReward,
     ticket_reward: room.ticketReward,
-    started_at: startedAtForRound(room, roundIndex, startedAtOverride),
-    ended_at: hasWinner ? endedAtForDraw(room, roundIndex, winningDrawCount, startedAtOverride) : null,
+    started_at: startedAtForRound(room, roundIndex),
+    ended_at: hasWinner ? endedAtForDraw(room, roundIndex, winningDrawCount) : null,
   }, 'id');
 
   const drawRows = draws.slice(0, winningDrawCount).map((number_drawn, index) => ({
@@ -355,7 +351,7 @@ async function processRoomRound(room, roundIndex, availableDrawCount, startedAtO
     round_id: id,
     number_drawn,
     draw_order: index + 1,
-    created_at: endedAtForDraw(room, roundIndex, index + 1, startedAtOverride),
+    created_at: endedAtForDraw(room, roundIndex, index + 1),
   }));
   await upsert('gamespark_bingo_draws', drawRows, 'round_id,number_drawn');
 
@@ -385,7 +381,7 @@ async function processRoomRound(room, roundIndex, availableDrawCount, startedAtO
       spark_reward: room.sparkReward,
       ticket_reward: room.ticketReward,
       is_bot: true,
-      created_at: endedAtForDraw(room, roundIndex, winningDrawCount, startedAtOverride),
+      created_at: endedAtForDraw(room, roundIndex, winningDrawCount),
     }));
     await insertMissingWinRows(id, winRows);
   }
@@ -393,53 +389,44 @@ async function processRoomRound(room, roundIndex, availableDrawCount, startedAtO
   return { id, status: hasWinner ? 'ended' : 'running', winners: winners.map((w) => w.bot.name), drawCount: winningDrawCount };
 }
 
-async function getLatestRound(roomId) {
-  const { data, error } = await supabase
-    .from('gamespark_bingo_rounds')
-    .select('id,room_id,round_index,status,started_at,ended_at')
-    .eq('room_id', roomId)
-    .order('round_index', { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (error) throw error;
-  return data || null;
-}
-
 async function tick() {
   const now = Date.now();
   const results = [];
 
   for (const room of ROOMS) {
-    const latest = await getLatestRound(room.id);
+    const t = timeline(room, now);
+    const roundsToProcess = new Set();
+    roundsToProcess.add(t.activeRoundIndex);
+    for (let i = 1; i <= ENGINE_LOOKBACK_ROUNDS; i++) roundsToProcess.add(t.activeRoundIndex - i);
 
-    let roundIndex;
-    let startedAt;
-    let availableDrawCount;
+    for (const roundIndex of roundsToProcess) {
+      if (roundIndex < 0) continue;
+      let availableDrawCount = room.maxNumber;
+      if (roundIndex === t.activeRoundIndex) {
+        if (t.phase === 'waiting') availableDrawCount = 0;
+        else if (t.phase === 'playing') availableDrawCount = Math.floor((t.phaseElapsedSec * 1000) / room.drawIntervalMs);
+        else availableDrawCount = room.maxNumber;
+      }
 
-    if (!latest) {
-      // Primo avvio: usa un indice stabile, poi da qui in avanti incrementa senza aspettare il vecchio ciclo temporale.
-      roundIndex = timeline(room, now).activeRoundIndex;
-      startedAt = new Date(now).toISOString();
-      availableDrawCount = 1;
-    } else if (latest.status === 'ended') {
-      const endedAt = latest.ended_at ? new Date(latest.ended_at).getTime() : 0;
-      const settlementMs = Math.max(3000, room.finishedSec * 1000);
-      if (endedAt && now - endedAt < settlementMs) {
-        results.push(`${room.id}#${latest.round_index}:ended:settlement`);
+      if (availableDrawCount <= 0 && roundIndex === t.activeRoundIndex) {
+        await upsert('gamespark_bingo_rounds', {
+          id: roundId(room.id, roundIndex),
+          room_id: room.id,
+          room_name: room.name,
+          round_index: roundIndex,
+          status: 'waiting',
+          winning_pattern: 'bingo',
+          spark_reward: room.sparkReward,
+          ticket_reward: room.ticketReward,
+          started_at: startedAtForRound(room, roundIndex),
+          ended_at: null,
+        }, 'id');
         continue;
       }
-      roundIndex = Number(latest.round_index) + 1;
-      startedAt = new Date(now).toISOString();
-      availableDrawCount = 1;
-    } else {
-      roundIndex = Number(latest.round_index);
-      startedAt = latest.started_at || new Date(now).toISOString();
-      const elapsedMs = Math.max(0, now - new Date(startedAt).getTime());
-      availableDrawCount = Math.min(room.maxNumber, Math.floor(elapsedMs / room.drawIntervalMs) + 1);
-    }
 
-    const result = await processRoomRound(room, roundIndex, availableDrawCount, startedAt);
-    results.push(`${room.id}#${roundIndex}:${result.status}:${result.drawCount}`);
+      const result = await processRoomRound(room, roundIndex, availableDrawCount);
+      results.push(`${room.id}#${roundIndex}:${result.status}:${result.drawCount}`);
+    }
   }
 
   console.log(`[bingo-engine] ${new Date().toISOString()} ${results.join(' | ')}`);
@@ -458,6 +445,6 @@ async function safeTick() {
   }
 }
 
-console.log(`[bingo-engine] Avviato. Intervallo ${ENGINE_INTERVAL_MS}ms. Room: ${ROOMS.map((r) => r.id).join(', ')}. Duplicate-safe. DB-driven rounds.`);
+console.log(`[bingo-engine] Avviato. Intervallo ${ENGINE_INTERVAL_MS}ms. Room: ${ROOMS.map((r) => r.id).join(', ')}. Duplicate-safe.`);
 void safeTick();
 setInterval(() => void safeTick(), ENGINE_INTERVAL_MS);
