@@ -8,8 +8,9 @@ import sparkIcon from "@/assets/icon-spark.png";
 import { ROOMS, getRoomTimeline, type RoomConfig } from "@/lib/rooms";
 import { useAudio } from "@/hooks/useAudio";
 import { useGameStore } from "@/lib/gameStore";
+import { recentBotWins, BOTS } from "@/lib/bots";
 import { formatRealWin, useRecentWinHistory } from "@/lib/winHistory";
-import { getControlledRoomPopulation } from "@/lib/admin";
+import { getControlledRoomPopulation, getBotConfigForRoom } from "@/lib/admin";
 import { LuckyStrikeModal } from "@/components/game/LuckyStrikeModal";
 import lsFab from "@/assets/ls-fab.png";
 
@@ -23,16 +24,62 @@ export const Route = createFileRoute("/lobby")({
   component: LobbyPage,
 });
 
+interface ActivityItem {
+  id: number;
+  text: string;
+  avatar: string;
+  ts: number;
+}
+
+let activityId = 0;
+
 function LobbyPage() {
   const realWins = useRecentWinHistory(6);
   const progressMission = useGameStore((s) => s.progressMission);
   const [now, setNow] = useState(() => Date.now());
   const [luckyOpen, setLuckyOpen] = useState(false);
   const [fabVisible, setFabVisible] = useState(true);
+  const [activity, setActivity] = useState<ActivityItem[]>(() => {
+    return ROOMS.slice(0, 3)
+      .flatMap((r) =>
+        recentBotWins(r.name).map((text) => ({
+          id: activityId++,
+          text,
+          avatar: BOTS[Math.floor(Math.random() * BOTS.length)].avatar,
+          ts: Date.now(),
+        })),
+      )
+      .slice(0, 4);
+  });
+
   useEffect(() => {
     progressMission("enter_lobby");
     const clock = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(clock);
+
+    function pushActivity() {
+      // Only show bot activity if the chosen room has bots enabled
+      const enabledRooms = ROOMS.filter((r) => getBotConfigForRoom(r.id).enabled && getBotConfigForRoom(r.id).botCount > 0);
+      const targetRooms = enabledRooms.length > 0 ? enabledRooms : ROOMS;
+      const room = targetRooms[Math.floor(Math.random() * targetRooms.length)];
+      const wins = recentBotWins(room.name);
+      const text = wins[Math.floor(Math.random() * wins.length)];
+      const avatar = BOTS[Math.floor(Math.random() * BOTS.length)].avatar;
+      setActivity((prev) => [{ id: activityId++, text, avatar, ts: Date.now() }, ...prev.slice(0, 5)]);
+    }
+
+    const schedule = () => {
+      const delay = 8000 + Math.random() * 12000;
+      return setTimeout(() => {
+        pushActivity();
+        timer = schedule();
+      }, delay);
+    };
+
+    let timer = schedule();
+    return () => {
+      clearTimeout(timer);
+      clearInterval(clock);
+    };
   }, [progressMission]);
 
   const roomSummary = useMemo(() => {
@@ -72,18 +119,18 @@ function LobbyPage() {
                 <span className="truncate"><span className="text-gold">{win.username}</span> ha vinto {win.prize_label || formatRealWin(win)}</span>
               </motion.div>
             ))}
-            {realWins.length === 0 && (
+            {activity.slice(0, Math.max(0, 6 - realWins.length)).map((item) => (
               <motion.div
-                key="empty-db-history"
+                key={item.id}
                 initial={{ x: -20, opacity: 0 }}
                 animate={{ x: 0, opacity: 1 }}
                 exit={{ opacity: 0 }}
-                className="flex items-center gap-2 text-xs font-bold text-white/45"
+                className="flex items-center gap-2 text-xs font-bold text-white/70"
               >
-                <span className="shrink-0 text-base">🏆</span>
-                <span className="truncate">Le ultime vincite appariranno appena vengono salvate nel database.</span>
+                <span className="shrink-0 text-base">{item.avatar}</span>
+                <span className="truncate">{item.text}</span>
               </motion.div>
-            )}
+            ))}
           </AnimatePresence>
         </div>
       </section>
@@ -253,6 +300,7 @@ function RoomCard({ room, delay, index }: { room: RoomConfig; delay: number; ind
   const progressMission = useGameStore((s) => s.progressMission);
   const [now, setNow] = useState(() => Date.now());
   const [players, setPlayers] = useState(() => getControlledRoomPopulation(room).total);
+  const [recentWin, setRecentWin] = useState(() => recentBotWins(room.name)[0]);
 
   useEffect(() => {
     const timer = setInterval(() => {
@@ -260,8 +308,15 @@ function RoomCard({ room, delay, index }: { room: RoomConfig; delay: number; ind
       setPlayers(getControlledRoomPopulation(room).total);
     }, 1000);
 
-    return () => clearInterval(timer);
-  }, [room]);
+    const winTimer = setInterval(() => {
+      setRecentWin(recentBotWins(room.name)[0]);
+    }, 15000);
+
+    return () => {
+      clearInterval(timer);
+      clearInterval(winTimer);
+    };
+  }, [room.name, index]);
 
   const timeline = getRoomTimeline(room, now);
   const countdown = `${Math.floor(timeline.phaseRemainingSec / 60)
@@ -354,7 +409,7 @@ function RoomCard({ room, delay, index }: { room: RoomConfig; delay: number; ind
                 {timeline.phase === "finished" && (
                   <>
                     <Trophy className="mr-0.5 inline h-3 w-3 text-gold" />
-                    {roomRealWins[0] ? formatRealWin(roomRealWins[0]) : "In attesa dei prossimi risultati salvati"}
+                    {roomRealWins[0] ? formatRealWin(roomRealWins[0]) : recentWin}
                   </>
                 )}
               </div>
