@@ -244,6 +244,24 @@ function intermediateLabel(completedLines: number): string {
   return `${completedLines} linee completate`;
 }
 
+
+function announceBingoVoice(muted: boolean) {
+  if (muted) return;
+  if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
+
+  try {
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance("BINGO!");
+    utterance.lang = "it-IT";
+    utterance.rate = 0.88;
+    utterance.pitch = 1.25;
+    utterance.volume = 1;
+    window.speechSynthesis.speak(utterance);
+  } catch {
+    // Speech synthesis is optional: if the browser blocks it, the visual BINGO banner still appears.
+  }
+}
+
 function BingoPage() {
   const { roomId } = Route.useSearch();
   const room = getRoom(roomId);
@@ -287,6 +305,7 @@ function BingoPage() {
   const bingoRewardedRoundRef = useRef<number | null>(null);
   const bingoAuditRoundRef = useRef<number | null>(null);
   const winnerModalRoundRef = useRef<number | null>(null);
+  const bingoVoiceRoundRef = useRef<number | null>(null);
   const speakTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const markTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -333,8 +352,46 @@ function BingoPage() {
     [upcomingReservations, room, playerSeed],
   );
 
-  const activeCards = timeline.phase === "playing" ? currentCards : [];
-  const previewCards = timeline.phase === "waiting" ? currentCards : upcomingCards;
+  const currentRoundOutcome = useMemo(() => getRoundOutcome({
+    room,
+    roundIndex: currentRoundIndex,
+    playerSeed,
+    playerName: username,
+    playerCards: currentReservations.map((entry) => ({ slot: entry.slot })),
+    botCount,
+  }), [room, currentRoundIndex, playerSeed, username, currentReservations, botCount]);
+
+  const rawDrawCount =
+    timeline.phase === "playing"
+      ? Math.min(maxDrawsForRoom(room), Math.max(0, Math.floor((timeline.phaseElapsedSec * 1000) / room.drawIntervalMs)))
+      : 0;
+  const winningDrawCount = currentRoundOutcome.drawIndex != null ? currentRoundOutcome.drawIndex + 1 : null;
+  const isBingoRoundClosed = timeline.phase === "playing" && winningDrawCount != null && rawDrawCount >= winningDrawCount;
+  const bingoClosedElapsedSec = isBingoRoundClosed && winningDrawCount != null
+    ? Math.max(0, Math.floor(((rawDrawCount - winningDrawCount) * room.drawIntervalMs) / 1000))
+    : 0;
+  const earlyCloseWaitingElapsedSec = Math.max(0, bingoClosedElapsedSec - room.finishedSec);
+  const displayTimeline = isBingoRoundClosed
+    ? bingoClosedElapsedSec >= room.finishedSec
+      ? {
+          ...timeline,
+          phase: "waiting" as const,
+          phaseElapsedSec: Math.min(room.waitingSec, earlyCloseWaitingElapsedSec),
+          phaseRemainingSec: Math.max(0, room.waitingSec - earlyCloseWaitingElapsedSec),
+        }
+      : {
+          ...timeline,
+          phase: "finished" as const,
+          phaseElapsedSec: Math.min(room.finishedSec, bingoClosedElapsedSec),
+          phaseRemainingSec: Math.max(0, room.finishedSec - bingoClosedElapsedSec),
+        }
+    : timeline;
+  const drawCount = winningDrawCount != null ? Math.min(rawDrawCount, winningDrawCount) : rawDrawCount;
+  const drawnNumbers = drawOrder.slice(0, drawCount);
+  const drawnNumber = drawCount > 0 ? drawnNumbers[drawCount - 1] : null;
+
+  const activeCards = displayTimeline.phase === "playing" ? currentCards : [];
+  const previewCards = displayTimeline.phase === "waiting" ? (isBingoRoundClosed ? upcomingCards : currentCards) : upcomingCards;
   const visibleCards = activeCards.length > 0 ? activeCards : previewCards;
   const deckCards = useMemo<CardInsight[]>(
     () =>
@@ -352,20 +409,12 @@ function BingoPage() {
         ),
     [visibleCards, effectiveCardSize],
   );
-  const isLateEntry = timeline.phase === "playing" && currentCards.length === 0;
-  const currentRoundOutcome = useMemo(() => getRoundOutcome({
-    room,
-    roundIndex: currentRoundIndex,
-    playerSeed,
-    playerName: username,
-    playerCards: currentReservations.map((entry) => ({ slot: entry.slot })),
-    botCount,
-  }), [room, currentRoundIndex, playerSeed, username, currentReservations, botCount]);
+  const isLateEntry = displayTimeline.phase === "playing" && currentCards.length === 0;
   const displayedWinnerNames = Array.from(new Set(
     (winnerNames.length > 0 ? winnerNames : currentRoundOutcome.winners.map((entry) => entry.name)).filter(Boolean),
   ));
   const finishedWinner = displayedWinnerNames.length > 0 ? displayedWinnerNames.join(", ") : null;
-  const targetRound = timeline.phase === "waiting" ? currentRoundIndex : upcomingRoundIndex;
+  const targetRound = displayTimeline.phase === "waiting" && !isBingoRoundClosed ? currentRoundIndex : upcomingRoundIndex;
   const reservedCountForTarget = purchasedCards.filter((entry) => entry.roundIndex === targetRound).length;
   const availableSlots = Math.max(0, maxCards - reservedCountForTarget);
   const affordableSlots = room.ticketCost === 0 ? availableSlots : Math.min(availableSlots, Math.floor(tickets / room.ticketCost));
@@ -381,7 +430,7 @@ function BingoPage() {
         message: "Accedi per entrare nel round, bloccare le cartelle e giocare davvero.",
         className: "border-cyan-300/35 bg-[linear-gradient(135deg,rgba(8,145,178,0.24),rgba(88,28,135,0.35))] text-cyan-50",
       }
-    : timeline.phase === "finished"
+    : displayTimeline.phase === "finished"
       ? {
           icon: "⏳",
           title: "Turno in chiusura",
@@ -416,7 +465,7 @@ function BingoPage() {
                 message: `Ti servono almeno ${room.ticketCost} Ticket per questa room. Vai allo shop oppure attendi una stanza gratuita.`,
                 className: "border-rose-300/45 bg-[linear-gradient(135deg,rgba(190,24,93,0.28),rgba(88,28,135,0.38))] text-rose-50",
               }
-          : timeline.phase === "playing"
+          : displayTimeline.phase === "playing"
             ? {
                 icon: "⚡",
                 title: "Prenotazione round successivo",
@@ -430,28 +479,19 @@ function BingoPage() {
                 className: "border-emerald-300/40 bg-[linear-gradient(135deg,rgba(5,150,105,0.24),rgba(88,28,135,0.36))] text-emerald-50",
               };
 
-  const secondsLabel = `${Math.floor(timeline.phaseRemainingSec / 60)
+  const secondsLabel = `${Math.floor(displayTimeline.phaseRemainingSec / 60)
     .toString()
-    .padStart(2, "0")}:${(timeline.phaseRemainingSec % 60).toString().padStart(2, "0")}`;
-  const phasePillLabel = timeline.phase === "waiting" ? secondsLabel : timeline.phase === "playing" ? "PARTITA IN CORSO" : "VALIDAZIONE";
+    .padStart(2, "0")}:${(displayTimeline.phaseRemainingSec % 60).toString().padStart(2, "0")}`;
+  const phasePillLabel = displayTimeline.phase === "waiting" ? secondsLabel : displayTimeline.phase === "playing" ? "PARTITA IN CORSO" : "VALIDAZIONE";
   const phaseDuration =
-    timeline.phase === "waiting" ? room.waitingSec : timeline.phase === "playing" ? 1 : room.finishedSec;
-  const phaseProgress = timeline.phase === "playing" ? 100 : Math.min(100, Math.max(0, (timeline.phaseElapsedSec / Math.max(1, phaseDuration)) * 100));
-
-  const rawDrawCount =
-    timeline.phase === "playing"
-      ? Math.min(maxDrawsForRoom(room), Math.max(0, Math.floor((timeline.phaseElapsedSec * 1000) / room.drawIntervalMs)))
-      : 0;
-  const winningDrawCount = currentRoundOutcome.drawIndex != null ? currentRoundOutcome.drawIndex + 1 : null;
-  const drawCount = winningDrawCount != null ? Math.min(rawDrawCount, winningDrawCount) : rawDrawCount;
-  const drawnNumbers = drawOrder.slice(0, drawCount);
-  const drawnNumber = drawCount > 0 ? drawnNumbers[drawCount - 1] : null;
+    displayTimeline.phase === "waiting" ? room.waitingSec : displayTimeline.phase === "playing" ? 1 : room.finishedSec;
+  const phaseProgress = displayTimeline.phase === "playing" ? 100 : Math.min(100, Math.max(0, (displayTimeline.phaseElapsedSec / Math.max(1, phaseDuration)) * 100));
 
   const glowColor = room.glow;
   const heroTitle =
-    timeline.phase === "waiting"
+    displayTimeline.phase === "waiting"
       ? "Prossima partita"
-      : timeline.phase === "playing"
+      : displayTimeline.phase === "playing"
         ? "PARTITA IN CORSO"
         : "FINE PARTITA";
   const bestCard = deckCards.length > 0 ? [...deckCards].sort((a, b) => a.bestMissing - b.bestMissing || b.matchedInBestLine - a.matchedInBestLine || a.slot - b.slot)[0] : null;
@@ -468,7 +508,7 @@ function BingoPage() {
       block: "nearest",
       inline: "center",
     });
-  }, [bestCardIndex, drawCount, timeline.phase]);
+  }, [bestCardIndex, drawCount, displayTimeline.phase]);
 
   useEffect(() => {
     if (!guestNotice) return;
@@ -572,9 +612,9 @@ function BingoPage() {
   }, [storageKey, purchasedCards, currentRoundIndex, isGuest]);
 
   useEffect(() => {
-    if (isGuest || timeline.phase !== "playing" || drawnNumbers.length === 0) return;
+    if (isGuest || displayTimeline.phase !== "playing" || drawnNumbers.length === 0) return;
     setPurchasedCards((prev) => syncCardsWithDraws(prev, room, playerSeed, currentRoundIndex, drawnNumbers));
-  }, [isGuest, timeline.phase, drawnNumbers, room, playerSeed, currentRoundIndex]);
+  }, [isGuest, displayTimeline.phase, drawnNumbers, room, playerSeed, currentRoundIndex]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -592,17 +632,17 @@ function BingoPage() {
   }, [currentRoundIndex]);
 
   useEffect(() => {
-    if (timeline.phase !== "playing") return;
+    if (displayTimeline.phase !== "playing") return;
     if (playedRoundRef.current === currentRoundIndex) return;
     playedRoundRef.current = currentRoundIndex;
     if (currentReservations.length > 0) incrementRoundsPlayed();
-  }, [timeline.phase, currentRoundIndex, currentReservations.length, incrementRoundsPlayed]);
+  }, [displayTimeline.phase, currentRoundIndex, currentReservations.length, incrementRoundsPlayed]);
 
   useEffect(() => {
-    if (timeline.phase === "waiting") {
+    if (displayTimeline.phase === "waiting") {
       botEngineRef.current?.onWaiting();
     }
-  }, [timeline.phase, currentRoundIndex]);
+  }, [displayTimeline.phase, currentRoundIndex]);
 
   useEffect(() => {
     if (!pageVisible || drawnNumber == null) return;
@@ -665,6 +705,10 @@ function BingoPage() {
     setWinnerCardSlot(localWinner?.cardSlot ?? null);
     setShowWin(true);
     sfx("win");
+    if (bingoVoiceRoundRef.current !== currentRoundIndex) {
+      bingoVoiceRoundRef.current = currentRoundIndex;
+      window.setTimeout(() => announceBingoVoice(muted), 1000);
+    }
     botEngineRef.current?.onBingo();
 
     if (!localWinner && bingoAuditRoundRef.current !== currentRoundIndex) {
@@ -747,7 +791,7 @@ function BingoPage() {
       origin: { y: 0.55 },
       colors: ["#ff3da6", "#f5b400", "#7c3aed", "#22d3ee", "#34d399"],
     });
-  }, [currentRoundOutcome, drawCount, currentRoundIndex, sfx, addSparks, addTickets, incrementBingosWon, room, room.sparkReward, room.ticketReward, room.id, room.name, user, username, drawOrder, playerSeed, currentReservations, botCount]);
+  }, [currentRoundOutcome, drawCount, currentRoundIndex, sfx, addSparks, addTickets, incrementBingosWon, room, room.sparkReward, room.ticketReward, room.id, room.name, user, username, drawOrder, playerSeed, currentReservations, botCount, muted]);
 
   useEffect(() => {
     return () => {
@@ -775,7 +819,7 @@ function BingoPage() {
       sfx("error");
       return;
     }
-    if (timeline.phase !== "playing" || n === 0) return;
+    if (displayTimeline.phase !== "playing" || n === 0) return;
     if (!drawnNumbers.includes(n)) {
       setGuestNotice("Puoi marcare solo i numeri già estratti in questo turno.");
       sfx("error");
@@ -814,7 +858,7 @@ function BingoPage() {
       goToAuth();
       return;
     }
-    if (timeline.phase === "finished") return;
+    if (displayTimeline.phase === "finished") return;
     if (!canBuyAny || availableSlots <= 0) {
       if (room.ticketCost > 0 && tickets < room.ticketCost) {
         sfx("tap");
@@ -896,13 +940,13 @@ function BingoPage() {
         <div className="flex flex-col items-center text-center">
           <h2 className="text-stroke-thin text-base font-extrabold uppercase text-gold">{room.name}</h2>
           <span className="flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-white/70">
-            {timeline.phase === "waiting" && (
+            {displayTimeline.phase === "waiting" && (
               <>
                 <Clock className="h-3 w-3" /> Prossima partita tra {secondsLabel}
               </>
             )}
-            {timeline.phase === "playing" && <>🔴 Partita in corso</>}
-            {timeline.phase === "finished" && (
+            {displayTimeline.phase === "playing" && <>🔴 Partita in corso</>}
+            {displayTimeline.phase === "finished" && (
               <>
                 <TimerReset className="h-3 w-3" /> Validazione vincita
               </>
@@ -954,7 +998,7 @@ function BingoPage() {
           <div className="absolute inset-0 flex items-center justify-center">
             <AnimatePresence mode="popLayout">
               <motion.span
-                key={`${timeline.phase}-${drawnNumber ?? secondsLabel}`}
+                key={`${displayTimeline.phase}-${drawnNumber ?? secondsLabel}`}
                 initial={{ scale: 0, rotate: -120, opacity: 0 }}
                 animate={{ scale: 1, rotate: 0, opacity: 1 }}
                 exit={{ scale: 0, opacity: 0 }}
@@ -967,12 +1011,12 @@ function BingoPage() {
                   color: "transparent",
                   WebkitTextStroke: "3px oklch(0.22 0.15 305)",
                   paintOrder: "stroke fill",
-                  fontSize: timeline.phase === "waiting" ? "2rem" : timeline.phase === "finished" ? "2.4rem" : "2rem",
+                  fontSize: displayTimeline.phase === "waiting" ? "2rem" : displayTimeline.phase === "finished" ? "2.4rem" : "2rem",
                 }}
               >
-                {timeline.phase === "waiting" && secondsLabel}
-                {timeline.phase === "playing" && (drawnNumber ?? "LIVE")}
-                {timeline.phase === "finished" && "🏆"}
+                {displayTimeline.phase === "waiting" && secondsLabel}
+                {displayTimeline.phase === "playing" && (drawnNumber ?? "LIVE")}
+                {displayTimeline.phase === "finished" && "🏆"}
               </motion.span>
             </AnimatePresence>
           </div>
@@ -985,19 +1029,19 @@ function BingoPage() {
         </div>
         <span className="text-stroke-thin text-xl font-extrabold italic text-white/90">{heroTitle}</span>
         <p className="mt-1 text-sm font-bold text-white/70">
-          {timeline.phase === "waiting" &&
+          {displayTimeline.phase === "waiting" &&
             "Il countdown indica solo quando parte il prossimo turno. Ora puoi scegliere quante cartelle comprare e bloccarle subito."}
-          {timeline.phase === "playing" &&
+          {displayTimeline.phase === "playing" &&
             "Partita bingo in corso. Il tempo non indica la durata del match: durante questa fase vedi solo lo stato live e, se arrivi tardi, prepari il turno successivo."}
-          {timeline.phase === "finished" && `Vincitori del turno: ${finishedWinner ?? "in validazione"}. Tra poco riparte una nuova prevendita.`}
+          {displayTimeline.phase === "finished" && `Vincitori del turno: ${finishedWinner ?? "in validazione"}. Tra poco riparte una nuova prevendita.`}
         </p>
 
-        {timeline.phase === "playing" && (
+        {displayTimeline.phase === "playing" && (
           <div className="mx-auto mt-3 inline-flex items-center gap-2 rounded-full border border-red-300/25 bg-red-500/15 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.14em] text-red-100">
             <span className="h-2 w-2 rounded-full bg-red-300" /> PARTITA IN CORSO
           </div>
         )}
-        {timeline.phase === "finished" && (
+        {displayTimeline.phase === "finished" && (
           <div className="mx-auto mt-3 inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/8 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.14em] text-white/80">
             <span className="h-2 w-2 rounded-full bg-gold" /> Validazione vincita in corso
           </div>
@@ -1005,12 +1049,12 @@ function BingoPage() {
 
         <div className="mx-auto mt-3 max-w-sm rounded-2xl border border-white/10 bg-black/25 px-3 py-3 shadow-card-game">
           <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-extrabold uppercase tracking-[0.14em] text-white/65">
-            <span>{timeline.phase === "waiting" ? "Countdown pre-partita" : timeline.phase === "playing" ? "Partita in corso" : "Chiusura turno"}</span>
+            <span>{displayTimeline.phase === "waiting" ? "Countdown pre-partita" : displayTimeline.phase === "playing" ? "Partita in corso" : "Chiusura turno"}</span>
             <span>{phasePillLabel}</span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-white/10">
             <motion.div
-              className={`h-full rounded-full ${timeline.phase === "playing" ? "bg-red-400" : "bg-gold-shine"}`}
+              className={`h-full rounded-full ${displayTimeline.phase === "playing" ? "bg-red-400" : "bg-gold-shine"}`}
               animate={{ width: `${phaseProgress}%` }}
               transition={{ duration: 0.45, ease: "easeOut" }}
             />
@@ -1018,7 +1062,7 @@ function BingoPage() {
           <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 text-[11px] font-bold text-white/65">
             {currentReservations.length > 0 && (
               <span className="rounded-full border border-gold/35 bg-gold/10 px-2 py-1 text-gold">
-                {currentReservations.length} {currentReservations.length === 1 ? "cartella" : "cartelle"} {timeline.phase === "playing" ? "attive" : "pronte"}
+                {currentReservations.length} {currentReservations.length === 1 ? "cartella" : "cartelle"} {displayTimeline.phase === "playing" ? "attive" : "pronte"}
               </span>
             )}
             {upcomingReservations.length > 0 && (
@@ -1040,7 +1084,7 @@ function BingoPage() {
               <div className="mb-3 flex items-start justify-between gap-3">
                 <div>
                   <p className="text-xs font-extrabold uppercase tracking-[0.2em] text-gold">
-                    {activeCards.length > 0 ? "Cartelle attive" : timeline.phase === "waiting" ? "Cartelle prenotate" : "Cartelle del prossimo turno"}
+                    {activeCards.length > 0 ? "Cartelle attive" : displayTimeline.phase === "waiting" ? "Cartelle prenotate" : "Cartelle del prossimo turno"}
                   </p>
                   <p className="text-[11px] font-bold text-white/60">
                     {deckCards.length === 1
@@ -1093,9 +1137,9 @@ function BingoPage() {
                       total={deckCards.length}
                       size={effectiveCardSize}
                       glowColor={glowColor}
-                      isInteractive={timeline.phase === "playing" && entry.roundIndex === currentRoundIndex}
+                      isInteractive={displayTimeline.phase === "playing" && entry.roundIndex === currentRoundIndex}
                       subtitle={
-                        timeline.phase === "playing" && entry.roundIndex === currentRoundIndex
+                        displayTimeline.phase === "playing" && entry.roundIndex === currentRoundIndex
                           ? "Cartella in focus per la partita in corso"
                           : entry.roundIndex === currentRoundIndex
                             ? "Sarà attiva allo start del round"
@@ -1115,14 +1159,14 @@ function BingoPage() {
             <div className="flex min-h-[240px] flex-col items-center justify-center px-4 text-center">
               <span className="mb-3 text-5xl">🎫</span>
               <p className="text-lg font-extrabold text-white">
-                {timeline.phase === "waiting" ? "Acquista una o più cartelle per il prossimo turno" : "Nessuna cartella attiva in questa partita"}
+                {displayTimeline.phase === "waiting" ? "Acquista una o più cartelle per il prossimo turno" : "Nessuna cartella attiva in questa partita"}
               </p>
               <p className="mt-1 text-sm font-bold text-white/60">
                 {isGuest
                   ? "Stai osservando la room come ospite. Accedi per comprare cartelle e partecipare davvero al prossimo turno."
-                  : timeline.phase === "waiting"
+                  : displayTimeline.phase === "waiting"
                     ? "Durante il countdown la vendita è aperta: scegli quante cartelle vuoi e partecipi appena inizia la partita."
-                    : timeline.phase === "playing"
+                    : displayTimeline.phase === "playing"
                       ? "Sei entrato a partita iniziata. Puoi già prenotare più cartelle valide per il prossimo turno."
                       : "Il turno è in chiusura. Attendi il nuovo countdown per comprare la prossima cartella."}
               </p>
@@ -1135,7 +1179,7 @@ function BingoPage() {
         <div className="grid grid-cols-2 gap-2">
           <StatusCard icon={<Ticket className="h-4 w-4" />} title="Costo/cartella" value={room.ticketCost === 0 ? "Gratis" : `${room.ticketCost} Ticket`} />
           <StatusCard icon={<Trophy className="h-4 w-4" />} title="Premio finale" value={`+${room.sparkReward} Spark · +${room.ticketReward} Ticket`} />
-          <StatusCard icon={<Clock className="h-4 w-4" />} title="Stato" value={timeline.phase === "waiting" ? "Prevendita" : timeline.phase === "playing" ? "Live" : "Chiusura"} />
+          <StatusCard icon={<Clock className="h-4 w-4" />} title="Stato" value={displayTimeline.phase === "waiting" ? "Prevendita" : displayTimeline.phase === "playing" ? "Live" : "Chiusura"} />
           <StatusCard icon={<TimerReset className="h-4 w-4" />} title="Max cartelle" value={`${maxCards} per round`} />
         </div>
       </section>
@@ -1182,7 +1226,7 @@ function BingoPage() {
         </div>
       </section>
 
-      {(timeline.phase === "playing" && currentReservations.length === 0) || timeline.phase === "finished" ? (
+      {(displayTimeline.phase === "playing" && currentReservations.length === 0) || displayTimeline.phase === "finished" ? (
         <section className="relative z-10 mt-3 px-4">
           <div className="rounded-3xl border border-white/10 bg-card-game p-4 shadow-card-game">
             <div className="flex items-start gap-3">
@@ -1191,12 +1235,12 @@ function BingoPage() {
               </span>
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-extrabold text-white">
-                  {timeline.phase === "playing"
+                  {displayTimeline.phase === "playing"
                     ? "Partita in corso, attendi la fine della partita per partecipare al prossimo turno"
                     : `Turno chiuso. Vincitori: ${finishedWinner ?? "in validazione"}`}
                 </p>
                 <p className="mt-1 text-xs font-bold text-white/60">
-                  {timeline.phase === "playing"
+                  {displayTimeline.phase === "playing"
                     ? "Non vedrai né riceverai cartelle per questa partita. Puoi però prenotare subito più cartelle per il turno successivo."
                     : "Tra pochi secondi comparirà di nuovo il countdown utile per acquistare le cartelle del turno successivo."}
                 </p>
@@ -1206,7 +1250,7 @@ function BingoPage() {
         </section>
       ) : null}
 
-      {timeline.phase === "playing" && drawnNumbers.length > 0 && (
+      {displayTimeline.phase === "playing" && drawnNumbers.length > 0 && (
         <div data-tour="bingo-drawn-numbers" className="relative z-10 mt-3 flex flex-wrap justify-center gap-1.5 px-4">
           {drawnNumbers.slice(-10).map((n) => (
             <span
@@ -1227,16 +1271,16 @@ function BingoPage() {
             <div className="flex items-start justify-between gap-3">
               <div>
                 <p className="text-sm font-extrabold text-white">
-                  {timeline.phase === "waiting" && (currentReservations.length > 0 ? "Prevendita aperta: puoi aggiungere altre cartelle" : "Prevendita aperta")}
-                  {timeline.phase === "playing" && (currentReservations.length > 0 ? "Partita in corso" : "Prenota il turno successivo")}
-                  {timeline.phase === "finished" && "Turno in chiusura"}
+                  {displayTimeline.phase === "waiting" && (currentReservations.length > 0 ? "Prevendita aperta: puoi aggiungere altre cartelle" : "Prevendita aperta")}
+                  {displayTimeline.phase === "playing" && (currentReservations.length > 0 ? "Partita in corso" : "Prenota il turno successivo")}
+                  {displayTimeline.phase === "finished" && "Turno in chiusura"}
                 </p>
                 <p className="mt-1 text-xs font-bold text-white/60">
-                  {timeline.phase === "waiting" &&
+                  {displayTimeline.phase === "waiting" &&
                     `Il countdown indica solo quando parte la prossima partita. Limite stanza: ${maxCards} cartelle.`}
-                  {timeline.phase === "playing" &&
+                  {displayTimeline.phase === "playing" &&
                     `La partita è già iniziata: ora puoi solo prenotare il round successivo. Puoi arrivare fino a ${maxCards} cartelle per round.`}
-                  {timeline.phase === "finished" && "Aspetta il nuovo countdown per il prossimo round."}
+                  {displayTimeline.phase === "finished" && "Aspetta il nuovo countdown per il prossimo round."}
                 </p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-right">
@@ -1285,12 +1329,12 @@ function BingoPage() {
             <button
               type="button"
               onClick={isGuest ? () => goToAuth() : reserveCards}
-              disabled={timeline.phase === "finished" || (!isGuest && availableSlots === 0) || (!isGuest && room.ticketCost > 0 && !canBuyAny)}
+              disabled={displayTimeline.phase === "finished" || (!isGuest && availableSlots === 0) || (!isGuest && room.ticketCost > 0 && !canBuyAny)}
               className="rounded-2xl bg-gold-shine px-4 py-3 text-sm font-extrabold text-purple-deep shadow-button-gold disabled:cursor-not-allowed disabled:opacity-50"
             >
               {isGuest
                 ? `Accedi per giocare · ${purchaseQty} ${purchaseQty === 1 ? "cartella" : "cartelle"}`
-                : timeline.phase === "finished"
+                : displayTimeline.phase === "finished"
                   ? "Turno in chiusura"
                   : availableSlots === 0
                     ? activeTargetReservations > 0
@@ -1298,7 +1342,7 @@ function BingoPage() {
                       : "Limite cartelle raggiunto"
                     : room.ticketCost === 0
                       ? `Blocca ${purchaseQty} ${purchaseQty === 1 ? "cartella" : "cartelle"} gratis`
-                      : `${timeline.phase === "waiting" ? "Acquista" : "Prenota"} ${purchaseQty} ${purchaseQty === 1 ? "cartella" : "cartelle"} · ${totalCost}T`}
+                      : `${displayTimeline.phase === "waiting" ? "Acquista" : "Prenota"} ${purchaseQty} ${purchaseQty === 1 ? "cartella" : "cartelle"} · ${totalCost}T`}
             </button>
 
             <div className={`relative overflow-hidden rounded-2xl border px-3 py-3 shadow-card-game ${purchaseStatus.className}`}>
