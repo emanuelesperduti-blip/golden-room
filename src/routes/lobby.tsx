@@ -373,6 +373,9 @@ function RoomCard({ room, delay, index }: { room: RoomConfig; delay: number; ind
                 <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-black/30 px-2 py-0.5 whitespace-nowrap">
                   <Ticket className="h-3 w-3" /> {canReserve}
                 </span>
+                <span className="flex shrink-0 items-center gap-0.5 rounded-full bg-black/30 px-2 py-0.5 whitespace-nowrap">
+                  Bingo {room.maxNumber} numeri
+                </span>
                 <span className="flex min-w-0 shrink-0 items-center gap-0.5 rounded-full bg-black/30 px-2 py-0.5 whitespace-nowrap leading-none">
                   <Flame className="h-3 w-3 text-gold" /> +{room.sparkReward}
                   <img src={sparkIcon} alt="" className="h-3 w-3" width={12} height={12} />

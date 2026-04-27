@@ -951,6 +951,7 @@ function BingoPage() {
         </button>
         <div className="flex flex-col items-center text-center">
           <h2 className="text-stroke-thin text-base font-extrabold uppercase text-gold">{room.name}</h2>
+          <span className="text-[10px] font-extrabold uppercase tracking-wider text-cyan-100/90">Bingo {room.maxNumber} numeri</span>
           <span className="flex items-center gap-1 text-[10px] font-extrabold uppercase tracking-wider text-white/70">
             {timeline.phase === "waiting" && (
               <>
@@ -1186,6 +1187,7 @@ function BingoPage() {
         <div className="grid grid-cols-2 gap-2">
           <StatusCard icon={<Ticket className="h-4 w-4" />} title="Costo/cartella" value={room.ticketCost === 0 ? "Gratis" : `${room.ticketCost} Ticket`} />
           <StatusCard icon={<Trophy className="h-4 w-4" />} title="Premio finale" value={`+${room.sparkReward} Spark · +${room.ticketReward} Ticket`} />
+          <StatusCard icon={<TimerReset className="h-4 w-4" />} title="Tipo partita" value={`Bingo ${room.maxNumber} numeri`} />
           <StatusCard icon={<Clock className="h-4 w-4" />} title="Stato" value={timeline.phase === "waiting" ? "Prevendita" : timeline.phase === "playing" ? "Live" : "Chiusura"} />
           <StatusCard icon={<TimerReset className="h-4 w-4" />} title="Max cartelle" value={`${maxCards} per round`} />
         </div>
