@@ -45,6 +45,35 @@ function sortChronological(records: RealWinRecord[], limit: number) {
     .slice(0, limit);
 }
 
+async function insertOrUpdateWinHistory(payload: Record<string, unknown>) {
+  const sourceRoundId = payload.source_round_id as string | undefined;
+  const userId = payload.user_id as string | undefined;
+  const gameType = payload.game_type as string | undefined;
+
+  if (sourceRoundId && userId && gameType) {
+    const { data: existing } = await supabase
+      .from("gamespark_win_history" as any)
+      .select("id")
+      .eq("source_round_id", sourceRoundId)
+      .eq("user_id", userId)
+      .eq("game_type", gameType)
+      .limit(1)
+      .maybeSingle();
+
+    if (existing?.id) {
+      const { error } = await supabase
+        .from("gamespark_win_history" as any)
+        .update(payload as any)
+        .eq("id", existing.id);
+      if (error) throw error;
+      return;
+    }
+  }
+
+  const { error } = await supabase.from("gamespark_win_history" as any).insert(payload as any);
+  if (error) throw error;
+}
+
 export async function recordRealWin(input: RecordWinInput) {
   if (!input.user?.id) return;
 
@@ -64,13 +93,7 @@ export async function recordRealWin(input: RecordWinInput) {
     };
 
     if (input.sourceRoundId) payload.source_round_id = input.sourceRoundId;
-
-    const query = supabase.from("gamespark_win_history" as any);
-    if (input.sourceRoundId) {
-      await query.upsert(payload as any, { onConflict: "source_round_id,user_id,game_type" } as any);
-    } else {
-      await query.insert(payload as any);
-    }
+    await insertOrUpdateWinHistory(payload);
   } catch (error) {
     console.warn("GameSpark: impossibile registrare la vincita reale", error);
   }

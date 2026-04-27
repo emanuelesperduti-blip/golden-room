@@ -129,7 +129,20 @@ export async function recordBingoRoundAudit(params: {
         is_bot: winner.kind === "bot",
       };
     });
-    if (winRows.length) await supabase.from("gamespark_win_history" as any).upsert(winRows as any, { onConflict: "source_round_id,user_id,game_type" } as any);
+
+    if (winRows.length) {
+      const { data: existingRows } = await supabase
+        .from("gamespark_win_history" as any)
+        .select("user_id,game_type")
+        .eq("source_round_id", id);
+
+      const existing = new Set(((existingRows ?? []) as any[]).map((row) => `${row.user_id}|${row.game_type}`));
+      const missingRows = winRows.filter((row) => !existing.has(`${row.user_id}|${row.game_type}`));
+      if (missingRows.length) {
+        const { error } = await supabase.from("gamespark_win_history" as any).insert(missingRows as any);
+        if (error) throw error;
+      }
+    }
   } catch (error) {
     console.warn("GameSpark: impossibile salvare audit Bingo", error);
   }

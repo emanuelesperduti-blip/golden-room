@@ -1112,8 +1112,7 @@ function BingoPage() {
                   </div>
                 </div>
                 <div className="shrink-0 text-right">
-                  <p className="text-xs font-extrabold text-gold">{win.prize_label || [`+${win.spark_reward} Spark`, win.ticket_reward > 0 ? `+${win.ticket_reward} Ticket` : ""].filter(Boolean).join(" · ")}</p>
-                  <p className="text-[10px] font-bold uppercase tracking-[0.12em] text-white/45">{win.is_bot ? "Live" : "Reale"}</p>
+                  <p className="text-xs font-extrabold text-gold">{[`+${win.spark_reward} Spark`, win.ticket_reward > 0 ? `+${win.ticket_reward} Ticket` : ""].filter(Boolean).join(" · ") || win.prize_label || "Premio"}</p>
                 </div>
               </div>
             ))}
