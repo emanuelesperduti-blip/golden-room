@@ -373,19 +373,62 @@ function BingoPage() {
   const totalCost = effectiveQty * room.ticketCost;
   const canBuyAny = room.ticketCost === 0 ? availableSlots > 0 : affordableSlots > 0;
   const activeTargetReservations = purchasedCards.filter((entry) => entry.roundIndex === targetRound).length;
-  const purchaseHelpMessage = isGuest
-    ? "Accedi per acquistare o prenotare cartelle."
+  const isVipRoom = room.badges.includes("vip");
+  const purchaseStatus = isGuest
+    ? {
+        icon: "🔐",
+        title: "Login richiesto",
+        message: "Accedi per entrare nel round, bloccare le cartelle e giocare davvero.",
+        className: "border-cyan-300/35 bg-[linear-gradient(135deg,rgba(8,145,178,0.24),rgba(88,28,135,0.35))] text-cyan-50",
+      }
     : timeline.phase === "finished"
-      ? "Il turno è in chiusura: aspetta il nuovo countdown per comprare le prossime cartelle."
+      ? {
+          icon: "⏳",
+          title: "Turno in chiusura",
+          message: "La vincita è in validazione. Appena riparte il countdown puoi bloccare nuove cartelle.",
+          className: "border-cyan-300/35 bg-[linear-gradient(135deg,rgba(14,116,144,0.22),rgba(30,41,59,0.45))] text-cyan-50",
+        }
       : availableSlots === 0
         ? activeTargetReservations > 0
-          ? `Hai già ${activeTargetReservations} ${activeTargetReservations === 1 ? "cartella" : "cartelle"} per questo round. Le trovi nella sezione cartelle.`
-          : "Limite cartelle raggiunto per questo round."
+          ? {
+              icon: "🎫",
+              title: "Cartelle già attive",
+              message: `Hai già ${activeTargetReservations} ${activeTargetReservations === 1 ? "cartella" : "cartelle"} per questo round. Le trovi qui sotto, pronte per giocare.`,
+              className: "border-gold/45 bg-[linear-gradient(135deg,rgba(245,158,11,0.24),rgba(88,28,135,0.36))] text-amber-50",
+            }
+          : {
+              icon: "🚧",
+              title: "Limite raggiunto",
+              message: "Hai raggiunto il massimo cartelle consentito per questa room.",
+              className: "border-orange-300/40 bg-[linear-gradient(135deg,rgba(194,65,12,0.24),rgba(88,28,135,0.34))] text-orange-50",
+            }
         : room.ticketCost > 0 && !canBuyAny
-          ? "Ticket insufficienti: vai allo shop oppure attendi una room gratuita."
+          ? isVipRoom
+            ? {
+                icon: "👑",
+                title: "Room VIP",
+                message: `Accesso premium: servono almeno ${room.ticketCost} Ticket per bloccare una cartella in questa stanza VIP.`,
+                className: "border-gold/55 bg-[linear-gradient(135deg,rgba(245,158,11,0.30),rgba(126,34,206,0.40),rgba(190,24,93,0.26))] text-amber-50",
+              }
+            : {
+                icon: "💎",
+                title: "Ticket insufficienti",
+                message: `Ti servono almeno ${room.ticketCost} Ticket per questa room. Vai allo shop oppure attendi una stanza gratuita.`,
+                className: "border-rose-300/45 bg-[linear-gradient(135deg,rgba(190,24,93,0.28),rgba(88,28,135,0.38))] text-rose-50",
+              }
           : timeline.phase === "playing"
-            ? "La partita è già iniziata: queste cartelle vengono prenotate per il prossimo round."
-            : "Vendita aperta: le cartelle vengono salvate e restano disponibili anche se esci e rientri.";
+            ? {
+                icon: "⚡",
+                title: "Prenotazione round successivo",
+                message: "La partita è live: blocchi ora le cartelle per il prossimo round, senza perdere il posto.",
+                className: "border-red-300/40 bg-[linear-gradient(135deg,rgba(220,38,38,0.25),rgba(88,28,135,0.38))] text-red-50",
+              }
+            : {
+                icon: "✨",
+                title: "Vendita aperta",
+                message: "Blocca le cartelle ora: vengono salvate e le ritrovi anche se esci, rientri o cambi dispositivo.",
+                className: "border-emerald-300/40 bg-[linear-gradient(135deg,rgba(5,150,105,0.24),rgba(88,28,135,0.36))] text-emerald-50",
+              };
 
   const secondsLabel = `${Math.floor(timeline.phaseRemainingSec / 60)
     .toString()
@@ -1258,8 +1301,17 @@ function BingoPage() {
                       : `${timeline.phase === "waiting" ? "Acquista" : "Prenota"} ${purchaseQty} ${purchaseQty === 1 ? "cartella" : "cartelle"} · ${totalCost}T`}
             </button>
 
-            <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-center text-[11px] font-bold text-white/65">
-              {purchaseHelpMessage}
+            <div className={`relative overflow-hidden rounded-2xl border px-3 py-3 shadow-card-game ${purchaseStatus.className}`}>
+              <div className="pointer-events-none absolute -right-6 -top-8 h-20 w-20 rounded-full bg-white/15 blur-2xl" />
+              <div className="relative flex items-start gap-2.5">
+                <span className="grid h-9 w-9 shrink-0 place-items-center rounded-2xl border border-white/25 bg-black/25 text-lg shadow-[inset_0_1px_0_rgba(255,255,255,0.18)]">
+                  {purchaseStatus.icon}
+                </span>
+                <div className="min-w-0 text-left">
+                  <p className="text-[10px] font-extrabold uppercase tracking-[0.16em] text-white/65">{purchaseStatus.title}</p>
+                  <p className="mt-0.5 text-[12px] font-extrabold leading-snug text-white">{purchaseStatus.message}</p>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -1267,9 +1319,9 @@ function BingoPage() {
             <button
               type="button"
               onClick={() => navigateWithStop("/shop")}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border border-white/15 bg-white/5 py-3 text-sm font-bold text-white/75"
+              className={`mt-3 flex w-full items-center justify-center gap-2 rounded-2xl border py-3 text-sm font-extrabold shadow-card-game active:scale-[0.99] ${isVipRoom ? "border-gold/45 bg-gold/10 text-gold" : "border-white/15 bg-white/5 text-white/80"}`}
             >
-              <ShoppingCart className="h-4 w-4" /> Ticket insufficienti? Vai allo shop
+              <ShoppingCart className="h-4 w-4" /> {isVipRoom ? "Sblocca Ticket per la Room VIP" : "Ticket insufficienti? Vai allo shop"}
             </button>
           )}
         </div>
