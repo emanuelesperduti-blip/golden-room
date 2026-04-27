@@ -239,7 +239,7 @@ function bingoProgressLabel(missingForBingo: number): string {
 }
 
 function intermediateLabel(completedLines: number): string {
-  if (completedLines <= 0) return "Nessun premio intermedio";
+  if (completedLines <= 0) return "";
   if (completedLines === 1) return "1 linea completata";
   return `${completedLines} linee completate`;
 }
@@ -389,6 +389,7 @@ function BingoPage() {
   const drawCount = winningDrawCount != null ? Math.min(rawDrawCount, winningDrawCount) : rawDrawCount;
   const drawnNumbers = drawOrder.slice(0, drawCount);
   const drawnNumber = drawCount > 0 ? drawnNumbers[drawCount - 1] : null;
+  const liveCardsInRoom = Math.max(0, botCount + currentReservations.length);
 
   const activeCards = displayTimeline.phase === "playing" ? currentCards : [];
   const previewCards = displayTimeline.phase === "waiting" ? (isBingoRoundClosed ? upcomingCards : currentCards) : upcomingCards;
@@ -1023,18 +1024,27 @@ function BingoPage() {
         </div>
       </section>
 
-      <div className="relative z-10 mt-1 px-4 text-center">
-        <div className="mb-2">
-          <RoomNumberPill value={room.maxNumber} />
+      <section className="relative z-10 -mt-1 px-4">
+        <div className="grid grid-cols-2 gap-2">
+          <div className="relative overflow-hidden rounded-2xl border border-gold/35 bg-[linear-gradient(135deg,rgba(245,158,11,0.20),rgba(88,28,135,0.32))] px-3 py-2 shadow-card-game">
+            <div className="pointer-events-none absolute -right-5 -top-6 h-14 w-14 rounded-full bg-gold/25 blur-xl" />
+            <p className="text-[9px] font-extrabold uppercase tracking-[0.16em] text-gold">Numeri estratti</p>
+            <p className="mt-0.5 font-display text-xl font-black leading-none text-white">
+              {displayTimeline.phase === "playing" ? drawnNumbers.length : 0}<span className="text-sm text-white/55">/{room.maxNumber}</span>
+            </p>
+          </div>
+          <div className="relative overflow-hidden rounded-2xl border border-cyan-300/30 bg-[linear-gradient(135deg,rgba(6,182,212,0.16),rgba(88,28,135,0.30))] px-3 py-2 text-right shadow-card-game">
+            <div className="pointer-events-none absolute -left-5 -top-6 h-14 w-14 rounded-full bg-cyan-300/20 blur-xl" />
+            <p className="text-[9px] font-extrabold uppercase tracking-[0.16em] text-cyan-100">Cartelle live</p>
+            <p className="mt-0.5 font-display text-xl font-black leading-none text-white">
+              {liveCardsInRoom}<span className="text-sm text-white/55"> in gioco</span>
+            </p>
+          </div>
         </div>
+      </section>
+
+      <div className="relative z-10 mt-2 px-4 text-center">
         <span className="text-stroke-thin text-xl font-extrabold italic text-white/90">{heroTitle}</span>
-        <p className="mt-1 text-sm font-bold text-white/70">
-          {displayTimeline.phase === "waiting" &&
-            "Il countdown indica solo quando parte il prossimo turno. Ora puoi scegliere quante cartelle comprare e bloccarle subito."}
-          {displayTimeline.phase === "playing" &&
-            "Partita bingo in corso. Il tempo non indica la durata del match: durante questa fase vedi solo lo stato live e, se arrivi tardi, prepari il turno successivo."}
-          {displayTimeline.phase === "finished" && `Vincitori del turno: ${finishedWinner ?? "in validazione"}. Tra poco riparte una nuova prevendita.`}
-        </p>
 
         {displayTimeline.phase === "playing" && (
           <div className="mx-auto mt-3 inline-flex items-center gap-2 rounded-full border border-red-300/25 bg-red-500/15 px-3 py-1 text-[11px] font-extrabold uppercase tracking-[0.14em] text-red-100">
@@ -1077,7 +1087,30 @@ function BingoPage() {
         </div>
       </div>
 
-      <section data-tour="bingo-main-card" className="relative z-10 mt-4 px-4">
+      {drawnNumbers.length > 0 && (
+        <section data-tour="bingo-drawn-numbers" className="relative z-10 mt-3 px-4">
+          <div className="mx-auto max-w-sm rounded-3xl border border-white/10 bg-black/30 px-3 py-3 shadow-card-game backdrop-blur-sm">
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-white/55">Ultimi numeri live</span>
+              <span className="rounded-full border border-gold/35 bg-gold/10 px-2 py-0.5 text-[10px] font-extrabold text-gold">{drawnNumbers.length}/{room.maxNumber}</span>
+            </div>
+            <div className="flex flex-wrap justify-center gap-1.5">
+              {drawnNumbers.slice(-10).map((n) => (
+                <span
+                  key={`${currentRoundIndex}-${n}`}
+                  className={`flex h-7 w-7 items-center justify-center rounded-full border text-xs font-extrabold ${
+                    drawHighlights(n) ? "border-gold/60 bg-gold-shine text-purple-deep" : "border-white/15 bg-white/10 text-white/65"
+                  }`}
+                >
+                  {n}
+                </span>
+              ))}
+            </div>
+          </div>
+        </section>
+      )}
+
+      <section data-tour="bingo-main-card" className="relative z-10 mt-3 px-4">
         <div className="overflow-hidden rounded-[1.75rem] border border-white/12 bg-[linear-gradient(180deg,oklch(0.28_0.14_305/0.95),oklch(0.18_0.1_300/0.98))] p-4 shadow-card-game">
           {deckCards.length > 0 ? (
             <>
@@ -1099,36 +1132,37 @@ function BingoPage() {
                       onClick={() => setShowAllCards(true)}
                       className="rounded-full border border-gold/35 bg-gold/10 px-3 py-2 text-[11px] font-extrabold uppercase tracking-[0.14em] text-gold transition active:scale-95"
                     >
-                      <span data-tour="bingo-view-all-cards">Vedi tutte le cartelle</span>
+                      <span data-tour="bingo-view-all-cards">Vedi tutte</span>
                     </button>
-                  ) : null}
-                  {deckCards.length > 1 ? (
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => scrollCards("left")}
-                        className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-black/20 text-white active:scale-95"
-                        aria-label="Scorri cartelle a sinistra"
-                      >
-                        <ArrowLeft className="h-4 w-4" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => scrollCards("right")}
-                        className="flex h-9 w-9 items-center justify-center rounded-full border border-white/15 bg-black/20 text-white active:scale-95"
-                        aria-label="Scorri cartelle a destra"
-                      >
-                        <ArrowLeft className="h-4 w-4 rotate-180" />
-                      </button>
-                    </div>
                   ) : null}
                 </div>
               </div>
 
-              <div
-                ref={cardsScrollRef}
-                className="no-scrollbar -mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-1"
-              >
+              <div className="relative">
+                {deckCards.length > 1 ? (
+                  <>
+                    <button
+                      type="button"
+                      onClick={() => scrollCards("left")}
+                      className="absolute left-0 top-1/2 z-20 flex h-11 w-11 -translate-x-3 -translate-y-1/2 items-center justify-center rounded-full border border-gold/45 bg-[linear-gradient(180deg,rgba(250,204,21,0.22),rgba(88,28,135,0.88))] text-white shadow-[0_0_22px_rgba(250,204,21,0.22)] active:scale-95"
+                      aria-label="Scorri cartelle a sinistra"
+                    >
+                      <ArrowLeft className="h-5 w-5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => scrollCards("right")}
+                      className="absolute right-0 top-1/2 z-20 flex h-11 w-11 translate-x-3 -translate-y-1/2 items-center justify-center rounded-full border border-gold/45 bg-[linear-gradient(180deg,rgba(250,204,21,0.22),rgba(88,28,135,0.88))] text-white shadow-[0_0_22px_rgba(250,204,21,0.22)] active:scale-95"
+                      aria-label="Scorri cartelle a destra"
+                    >
+                      <ArrowLeft className="h-5 w-5 rotate-180" />
+                    </button>
+                  </>
+                ) : null}
+                <div
+                  ref={cardsScrollRef}
+                  className="no-scrollbar -mx-1 flex snap-x snap-mandatory gap-3 overflow-x-auto px-1 pb-1"
+                >
                 {deckCards.map((entry, idx) => (
                   <div key={entry.key} className="min-w-full snap-center">
                     <BingoCardPanel
@@ -1153,6 +1187,7 @@ function BingoPage() {
                     />
                   </div>
                 ))}
+                </div>
               </div>
             </>
           ) : (
@@ -1183,26 +1218,12 @@ function BingoPage() {
           <StatusCard icon={<TimerReset className="h-4 w-4" />} title="Max cartelle" value={`${maxCards} per round`} />
         </div>
       </section>
-      <section data-tour="bingo-drawn-numbers" className="relative z-10 mt-3 px-4">
-        <div className="rounded-3xl border border-white/10 bg-card-game p-4 shadow-card-game">
-          <div className="flex items-start gap-3">
-            <span className="mt-0.5 flex h-10 w-10 items-center justify-center rounded-2xl bg-black/25 text-gold">
-              <Trophy className="h-5 w-5" />
-            </span>
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-extrabold text-white">Gerarchia premi trasparente</p>
-              <p className="mt-1 text-xs font-bold text-white/65">Linea, più linee e altri avanzamenti sono eventi intermedi della corsa. Il vero BINGO e il premio finale arrivano solo quando tutte le caselle della cartella sono uscite.</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <section className="relative z-10 mt-3 px-4">
         <div className="rounded-3xl border border-white/10 bg-card-game p-4 shadow-card-game">
           <div className="flex items-center justify-between gap-2">
             <div>
               <p className="text-sm font-extrabold text-white">Ultimi esiti room</p>
-              <p className="mt-1 text-[11px] font-bold text-white/55">Il BINGO vero arriva solo a cartella completata. Linee e multi-linee restano eventi intermedi della corsa al premio finale.</p>
+              <p className="mt-1 text-[11px] font-bold text-white/55">Ultime vincite registrate in questa room.</p>
             </div>
             <span className="rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-white/55">Storico live</span>
           </div>
@@ -1250,21 +1271,6 @@ function BingoPage() {
         </section>
       ) : null}
 
-      {displayTimeline.phase === "playing" && drawnNumbers.length > 0 && (
-        <div data-tour="bingo-drawn-numbers" className="relative z-10 mt-3 flex flex-wrap justify-center gap-1.5 px-4">
-          {drawnNumbers.slice(-10).map((n) => (
-            <span
-              key={`${currentRoundIndex}-${n}`}
-              className={`flex h-7 w-7 items-center justify-center rounded-full border text-xs font-extrabold ${
-                drawHighlights(n) ? "border-gold/60 bg-gold-shine text-purple-deep" : "border-white/15 bg-white/10 text-white/60"
-              }`}
-            >
-              {n}
-            </span>
-          ))}
-        </div>
-      )}
-
       <section className="relative z-10 mt-4 px-4">
         <div className="rounded-3xl border border-white/10 bg-card-game p-4 shadow-card-game">
           <div className="flex flex-col gap-3">
@@ -1276,11 +1282,9 @@ function BingoPage() {
                   {displayTimeline.phase === "finished" && "Turno in chiusura"}
                 </p>
                 <p className="mt-1 text-xs font-bold text-white/60">
-                  {displayTimeline.phase === "waiting" &&
-                    `Il countdown indica solo quando parte la prossima partita. Limite stanza: ${maxCards} cartelle.`}
-                  {displayTimeline.phase === "playing" &&
-                    `La partita è già iniziata: ora puoi solo prenotare il round successivo. Puoi arrivare fino a ${maxCards} cartelle per round.`}
-                  {displayTimeline.phase === "finished" && "Aspetta il nuovo countdown per il prossimo round."}
+                  {displayTimeline.phase === "waiting" && `Scegli le cartelle e preparati al prossimo round. Max ${maxCards}.`}
+                  {displayTimeline.phase === "playing" && `Round live: puoi prenotare le cartelle per il prossimo turno. Max ${maxCards}.`}
+                  {displayTimeline.phase === "finished" && "Turno quasi pronto: attendi il nuovo countdown."}
                 </p>
               </div>
               <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-right">
@@ -1387,7 +1391,7 @@ function BingoPage() {
             >
               <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-4">
                 <div>
-                  <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-gold">Vedi tutte le cartelle</p>
+                  <p className="text-xs font-extrabold uppercase tracking-[0.18em] text-gold">Vedi tutte</p>
                   <p className="mt-1 text-[11px] font-bold text-white/60">Miniature compatte per confrontare tutte le cartelle acquistate in un colpo d'occhio.</p>
                 </div>
                 <button
@@ -1630,11 +1634,6 @@ function BingoCardPanel({
         <div>
           <div className="flex flex-wrap items-center gap-1.5">
             <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-white">Cartella {index + 1}</p>
-            {isBest ? (
-              <span className="rounded-full border border-cyan-200/50 bg-cyan-300/18 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.12em] text-white">
-                Best focus
-              </span>
-            ) : null}
           </div>
           <p className="mt-1 text-[11px] font-bold text-white/75">{subtitle}</p>
         </div>
@@ -1642,9 +1641,16 @@ function BingoCardPanel({
           <span className="rounded-full border border-yellow-200/45 bg-yellow-300/15 px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-yellow-100">
             {bingoLabel}
           </span>
-          <span className="rounded-full border border-white/12 bg-black/18 px-2 py-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-white/72">
-            {intermediateStatus}
-          </span>
+          {isBest ? (
+            <span className="rounded-full border border-cyan-200/50 bg-cyan-300/18 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.12em] text-white">
+              Best focus
+            </span>
+          ) : null}
+          {intermediateStatus ? (
+            <span className="rounded-full border border-white/12 bg-black/18 px-2 py-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-white/72">
+              {intermediateStatus}
+            </span>
+          ) : null}
           {total > 1 ? <span className="text-[10px] font-extrabold text-white/70">{index + 1}/{total}</span> : null}
         </div>
       </div>
