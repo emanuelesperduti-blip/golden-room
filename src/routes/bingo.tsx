@@ -372,6 +372,20 @@ function BingoPage() {
   const effectiveQty = Math.max(0, Math.min(purchaseQty, affordableSlots || (room.ticketCost === 0 ? availableSlots : 0)));
   const totalCost = effectiveQty * room.ticketCost;
   const canBuyAny = room.ticketCost === 0 ? availableSlots > 0 : affordableSlots > 0;
+  const activeTargetReservations = purchasedCards.filter((entry) => entry.roundIndex === targetRound).length;
+  const purchaseHelpMessage = isGuest
+    ? "Accedi per acquistare o prenotare cartelle."
+    : timeline.phase === "finished"
+      ? "Il turno è in chiusura: aspetta il nuovo countdown per comprare le prossime cartelle."
+      : availableSlots === 0
+        ? activeTargetReservations > 0
+          ? `Hai già ${activeTargetReservations} ${activeTargetReservations === 1 ? "cartella" : "cartelle"} per questo round. Le trovi nella sezione cartelle.`
+          : "Limite cartelle raggiunto per questo round."
+        : room.ticketCost > 0 && !canBuyAny
+          ? "Ticket insufficienti: vai allo shop oppure attendi una room gratuita."
+          : timeline.phase === "playing"
+            ? "La partita è già iniziata: queste cartelle vengono prenotate per il prossimo round."
+            : "Vendita aperta: le cartelle vengono salvate e restano disponibili anche se esci e rientri.";
 
   const secondsLabel = `${Math.floor(timeline.phaseRemainingSec / 60)
     .toString()
@@ -1236,11 +1250,17 @@ function BingoPage() {
                 : timeline.phase === "finished"
                   ? "Turno in chiusura"
                   : availableSlots === 0
-                    ? "Limite cartelle raggiunto"
+                    ? activeTargetReservations > 0
+                      ? "Cartelle già attive"
+                      : "Limite cartelle raggiunto"
                     : room.ticketCost === 0
                       ? `Blocca ${purchaseQty} ${purchaseQty === 1 ? "cartella" : "cartelle"} gratis`
                       : `${timeline.phase === "waiting" ? "Acquista" : "Prenota"} ${purchaseQty} ${purchaseQty === 1 ? "cartella" : "cartelle"} · ${totalCost}T`}
             </button>
+
+            <div className="rounded-2xl border border-white/10 bg-black/20 px-3 py-2 text-center text-[11px] font-bold text-white/65">
+              {purchaseHelpMessage}
+            </div>
           </div>
 
           {room.ticketCost > 0 && tickets < room.ticketCost && (
