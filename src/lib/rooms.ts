@@ -69,10 +69,10 @@ export const ROOMS: RoomConfig[] = [
     subtitle: "Free room — perfetta per iniziare",
     img: nightBingo,
     tier: "free",
-    cycleSec: 336,      // 180 + 144 + 12
+    cycleSec: 329,      // 180 + 144 + 5
     waitingSec: 180,
     playingSec: 144,    // 60 numeri × 2 400ms = 144 000ms esatti
-    finishedSec: 12,
+    finishedSec: 5,
     drawIntervalMs: 2400,
     ticketCost: 0,
     sparkReward: 6,
@@ -89,10 +89,10 @@ export const ROOMS: RoomConfig[] = [
     subtitle: "Veloce, divertente, infinito",
     img: nightBingo,
     tier: "standard",
-    cycleSec: 365,      // 180 + 173 + 12
+    cycleSec: 358,      // 180 + 173 + 5
     waitingSec: 180,
     playingSec: 173,    // 75 numeri × 2 300ms = 172 500ms → ceil → 173
-    finishedSec: 12,
+    finishedSec: 5,
     drawIntervalMs: 2300,
     ticketCost: 1,
     sparkReward: 14,
@@ -109,10 +109,10 @@ export const ROOMS: RoomConfig[] = [
     subtitle: "La room dei big winners",
     img: goldenCity,
     tier: "premium",
-    cycleSec: 430,      // 180 + 234 + 16
+    cycleSec: 419,      // 180 + 234 + 5
     waitingSec: 180,
     playingSec: 234,    // 90 numeri × 2 600ms = 234 000ms esatti
-    finishedSec: 16,
+    finishedSec: 5,
     drawIntervalMs: 2600,
     ticketCost: 2,
     sparkReward: 36,
@@ -129,10 +129,10 @@ export const ROOMS: RoomConfig[] = [
     subtitle: "Solo per i veri Re — reward x3",
     img: vipCrown,
     tier: "vip",
-    cycleSec: 450,      // 180 + 252 + 18
+    cycleSec: 437,      // 180 + 252 + 5
     waitingSec: 180,
     playingSec: 252,    // 90 numeri × 2 800ms = 252 000ms esatti
-    finishedSec: 18,
+    finishedSec: 5,
     drawIntervalMs: 2800,
     ticketCost: 5,
     sparkReward: 90,
@@ -149,10 +149,10 @@ export const ROOMS: RoomConfig[] = [
     subtitle: "Una partita ogni 10 minuti, jackpot enorme",
     img: vipCrown,
     tier: "jackpot",
-    cycleSec: 464,      // 210 + 234 + 20
+    cycleSec: 449,      // 210 + 234 + 5
     waitingSec: 210,
     playingSec: 234,    // 90 numeri × 2 600ms = 234 000ms esatti
-    finishedSec: 20,
+    finishedSec: 5,
     drawIntervalMs: 2600,
     ticketCost: 10,
     sparkReward: 300,

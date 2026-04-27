@@ -28,6 +28,7 @@ import { useViewerGameState } from "@/hooks/useViewerGameState";
 import { BOTS, BotChatEngine } from "@/lib/bots";
 import { getBotConfigForRoom } from "@/lib/admin";
 import { formatRealWin, recordRealWin, useRecentWinHistory } from "@/lib/winHistory";
+import { recordBingoRoundAudit } from "@/lib/bingoAudit";
 
 const searchSchema = z.object({ roomId: z.string().optional() });
 
@@ -284,6 +285,7 @@ function BingoPage() {
   const playedRoundRef = useRef<number | null>(null);
   const cleanupRoundRef = useRef<number | null>(null);
   const bingoRewardedRoundRef = useRef<number | null>(null);
+  const bingoAuditRoundRef = useRef<number | null>(null);
   const winnerModalRoundRef = useRef<number | null>(null);
   const speakTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const markTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -607,6 +609,25 @@ function BingoPage() {
     setShowWin(true);
     sfx("win");
     botEngineRef.current?.onBingo();
+
+    if (!localWinner && bingoAuditRoundRef.current !== currentRoundIndex) {
+      bingoAuditRoundRef.current = currentRoundIndex;
+      void recordBingoRoundAudit({
+        room,
+        roundIndex: currentRoundIndex,
+        drawOrder,
+        winningDrawCount: currentRoundOutcome.drawIndex + 1,
+        playerSeed,
+        playerUserId: user?.id ?? null,
+        playerName: username,
+        playerCards: currentReservations.map((entry) => ({ slot: entry.slot })),
+        botCount,
+        winners: currentRoundOutcome.winners,
+        sparkReward: room.sparkReward,
+        ticketReward: room.ticketReward,
+      });
+    }
+
     if (localWinner) {
       // Apply event multipliers (Step 11)
       let sparkReward = room.sparkReward;
@@ -631,6 +652,23 @@ function BingoPage() {
 
       const finalSparkReward = Math.floor(sparkReward);
       const finalTicketReward = Math.floor(ticketReward);
+      if (bingoAuditRoundRef.current !== currentRoundIndex) {
+        bingoAuditRoundRef.current = currentRoundIndex;
+        void recordBingoRoundAudit({
+          room,
+          roundIndex: currentRoundIndex,
+          drawOrder,
+          winningDrawCount: currentRoundOutcome.drawIndex + 1,
+          playerSeed,
+          playerUserId: user?.id ?? null,
+          playerName: username,
+          playerCards: currentReservations.map((entry) => ({ slot: entry.slot })),
+          botCount,
+          winners: currentRoundOutcome.winners,
+          sparkReward: finalSparkReward,
+          ticketReward: finalTicketReward,
+        });
+      }
       addSparks(finalSparkReward);
       addTickets(finalTicketReward);
       incrementBingosWon();
@@ -640,6 +678,7 @@ function BingoPage() {
         roomId: room.id,
         roomName: room.name,
         gameType: "bingo",
+        sourceRoundId: `${room.id}:${currentRoundIndex}`,
         prizeLabel: [`+${finalSparkReward} Spark`, finalTicketReward > 0 ? `+${finalTicketReward} Ticket` : ""].filter(Boolean).join(" · "),
         sparkReward: finalSparkReward,
         ticketReward: finalTicketReward,
@@ -651,7 +690,7 @@ function BingoPage() {
       origin: { y: 0.55 },
       colors: ["#ff3da6", "#f5b400", "#7c3aed", "#22d3ee", "#34d399"],
     });
-  }, [currentRoundOutcome, drawCount, currentRoundIndex, sfx, addSparks, addTickets, incrementBingosWon, room.sparkReward, room.ticketReward, room.id, room.name, user, username]);
+  }, [currentRoundOutcome, drawCount, currentRoundIndex, sfx, addSparks, addTickets, incrementBingosWon, room, room.sparkReward, room.ticketReward, room.id, room.name, user, username, drawOrder, playerSeed, currentReservations, botCount]);
 
   useEffect(() => {
     return () => {
