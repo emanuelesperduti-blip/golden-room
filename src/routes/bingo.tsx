@@ -988,31 +988,6 @@ function BingoPage() {
       />
 
       <section data-tour="bingo-live-ball" className="relative z-10 mt-2 min-h-[172px] px-4">
-        <div className="absolute left-4 top-3 z-20 flex w-[112px] flex-col gap-2">
-          <div className="relative overflow-hidden rounded-2xl border border-gold/45 bg-[linear-gradient(135deg,rgba(245,158,11,0.24),rgba(88,28,135,0.38))] px-2.5 py-2 shadow-[0_0_24px_rgba(245,158,11,0.18)] backdrop-blur-sm">
-            <div className="pointer-events-none absolute -right-4 -top-5 h-12 w-12 rounded-full bg-gold/30 blur-xl" />
-            <div className="flex items-center gap-2">
-              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-gold/50 bg-gold/15 text-[14px] shadow-[inset_0_1px_4px_rgba(255,255,255,0.16)]">🎱</span>
-              <div className="min-w-0">
-                <p className="text-[8px] font-extrabold uppercase leading-none tracking-[0.14em] text-gold">Estratti</p>
-                <p className="mt-0.5 font-display text-[20px] font-black leading-none text-white">
-                  {displayTimeline.phase === "playing" ? drawnNumbers.length : 0}<span className="text-[12px] text-white/55">/{room.maxNumber}</span>
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="relative overflow-hidden rounded-2xl border border-fuchsia-300/45 bg-[linear-gradient(135deg,rgba(168,85,247,0.22),rgba(8,145,178,0.18),rgba(88,28,135,0.32))] px-2.5 py-2 shadow-[0_0_24px_rgba(217,70,239,0.18)] backdrop-blur-sm">
-            <div className="pointer-events-none absolute -right-4 -top-5 h-12 w-12 rounded-full bg-fuchsia-300/22 blur-xl" />
-            <div className="flex items-center gap-2">
-              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-fuchsia-200/45 bg-fuchsia-400/18 text-[14px] shadow-[inset_0_1px_4px_rgba(255,255,255,0.16)]">👥</span>
-              <div className="min-w-0">
-                <p className="font-display text-[20px] font-black leading-none text-white">{liveCardsInRoom}</p>
-                <p className="mt-0.5 text-[8px] font-extrabold uppercase leading-none tracking-[0.12em] text-cyan-100">Cartelle live</p>
-              </div>
-            </div>
-          </div>
-        </div>
-
         <div className="relative mx-auto flex h-40 w-40 items-center justify-center">
           <motion.div
             className="absolute inset-0 rounded-full"
@@ -1101,7 +1076,14 @@ function BingoPage() {
           <div className="mx-auto max-w-sm rounded-3xl border border-white/10 bg-black/30 px-3 py-3 shadow-card-game backdrop-blur-sm">
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-white/55">Ultimi numeri estratti</span>
-              <span className="rounded-full border border-gold/35 bg-gold/10 px-2 py-0.5 text-[10px] font-extrabold text-gold">{drawnNumbers.length}/{room.maxNumber}</span>
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 rounded-full border border-cyan-300/35 bg-cyan-400/10 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.12em] text-cyan-100 shadow-[0_0_14px_rgba(34,211,238,0.12)]">
+                  <span className="text-[10px]">👥</span>
+                  <span className="font-display text-[12px] leading-none text-white">{liveCardsInRoom}</span>
+                  <span>cartelle live</span>
+                </span>
+                <span className="rounded-full border border-gold/35 bg-gold/10 px-2 py-0.5 text-[10px] font-extrabold text-gold">{drawnNumbers.length}/{room.maxNumber}</span>
+              </div>
             </div>
             <div className="flex flex-wrap justify-center gap-1.5">
               {drawnNumbers.slice(-10).map((n) => (
