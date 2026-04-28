@@ -987,14 +987,40 @@ function BingoPage() {
         style={{ background: `radial-gradient(ellipse 70% 50% at 50% 20%, ${glowColor}, transparent 70%)` }}
       />
 
-      <section data-tour="bingo-live-ball" className="relative z-10 mt-2 flex items-center justify-center">
-        <div className="relative flex h-36 w-36 items-center justify-center">
+      <section data-tour="bingo-live-ball" className="relative z-10 mt-2 min-h-[172px] px-4">
+        <div className="absolute left-4 top-3 z-20 flex w-[112px] flex-col gap-2">
+          <div className="relative overflow-hidden rounded-2xl border border-gold/45 bg-[linear-gradient(135deg,rgba(245,158,11,0.24),rgba(88,28,135,0.38))] px-2.5 py-2 shadow-[0_0_24px_rgba(245,158,11,0.18)] backdrop-blur-sm">
+            <div className="pointer-events-none absolute -right-4 -top-5 h-12 w-12 rounded-full bg-gold/30 blur-xl" />
+            <div className="flex items-center gap-2">
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-gold/50 bg-gold/15 text-[14px] shadow-[inset_0_1px_4px_rgba(255,255,255,0.16)]">🎱</span>
+              <div className="min-w-0">
+                <p className="text-[8px] font-extrabold uppercase leading-none tracking-[0.14em] text-gold">Estratti</p>
+                <p className="mt-0.5 font-display text-[20px] font-black leading-none text-white">
+                  {displayTimeline.phase === "playing" ? drawnNumbers.length : 0}<span className="text-[12px] text-white/55">/{room.maxNumber}</span>
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="relative overflow-hidden rounded-2xl border border-fuchsia-300/45 bg-[linear-gradient(135deg,rgba(168,85,247,0.22),rgba(8,145,178,0.18),rgba(88,28,135,0.32))] px-2.5 py-2 shadow-[0_0_24px_rgba(217,70,239,0.18)] backdrop-blur-sm">
+            <div className="pointer-events-none absolute -right-4 -top-5 h-12 w-12 rounded-full bg-fuchsia-300/22 blur-xl" />
+            <div className="flex items-center gap-2">
+              <span className="grid h-7 w-7 shrink-0 place-items-center rounded-full border border-fuchsia-200/45 bg-fuchsia-400/18 text-[14px] shadow-[inset_0_1px_4px_rgba(255,255,255,0.16)]">👥</span>
+              <div className="min-w-0">
+                <p className="font-display text-[20px] font-black leading-none text-white">{liveCardsInRoom}</p>
+                <p className="mt-0.5 text-[8px] font-extrabold uppercase leading-none tracking-[0.12em] text-cyan-100">Cartelle live</p>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="relative mx-auto flex h-40 w-40 items-center justify-center">
           <motion.div
             className="absolute inset-0 rounded-full"
             animate={{ scale: [1, 1.12, 1], opacity: [0.5, 0.9, 0.5] }}
             transition={{ duration: 2, repeat: Infinity }}
             style={{ background: `radial-gradient(circle, ${glowColor}, transparent 60%)`, filter: "blur(18px)" }}
           />
+          <div className="absolute -bottom-2 h-8 w-40 rounded-full bg-gold/25 blur-xl" />
           <img src={bingoBall} alt="" className="h-full w-full drop-shadow-[0_8px_20px_oklch(0_0_0/0.5)]" width={512} height={512} />
           <div className="absolute inset-0 flex items-center justify-center">
             <AnimatePresence mode="popLayout">
@@ -1024,25 +1050,6 @@ function BingoPage() {
         </div>
       </section>
 
-      <section className="relative z-10 -mt-1 px-4">
-        <div className="grid grid-cols-2 gap-2">
-          <div className="relative overflow-hidden rounded-2xl border border-gold/35 bg-[linear-gradient(135deg,rgba(245,158,11,0.20),rgba(88,28,135,0.32))] px-3 py-2 shadow-card-game">
-            <div className="pointer-events-none absolute -right-5 -top-6 h-14 w-14 rounded-full bg-gold/25 blur-xl" />
-            <p className="text-[9px] font-extrabold uppercase tracking-[0.16em] text-gold">Numeri estratti</p>
-            <p className="mt-0.5 font-display text-xl font-black leading-none text-white">
-              {displayTimeline.phase === "playing" ? drawnNumbers.length : 0}<span className="text-sm text-white/55">/{room.maxNumber}</span>
-            </p>
-          </div>
-          <div className="relative overflow-hidden rounded-2xl border border-cyan-300/30 bg-[linear-gradient(135deg,rgba(6,182,212,0.16),rgba(88,28,135,0.30))] px-3 py-2 text-right shadow-card-game">
-            <div className="pointer-events-none absolute -left-5 -top-6 h-14 w-14 rounded-full bg-cyan-300/20 blur-xl" />
-            <p className="text-[9px] font-extrabold uppercase tracking-[0.16em] text-cyan-100">Cartelle live</p>
-            <p className="mt-0.5 font-display text-xl font-black leading-none text-white">
-              {liveCardsInRoom}<span className="text-sm text-white/55"> in gioco</span>
-            </p>
-          </div>
-        </div>
-      </section>
-
       <div className="relative z-10 mt-2 px-4 text-center">
         <span className="text-stroke-thin text-xl font-extrabold italic text-white/90">{heroTitle}</span>
 
@@ -1057,41 +1064,43 @@ function BingoPage() {
           </div>
         )}
 
-        <div className="mx-auto mt-3 max-w-sm rounded-2xl border border-white/10 bg-black/25 px-3 py-3 shadow-card-game">
-          <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-extrabold uppercase tracking-[0.14em] text-white/65">
-            <span>{displayTimeline.phase === "waiting" ? "Countdown pre-partita" : displayTimeline.phase === "playing" ? "Partita in corso" : "Chiusura turno"}</span>
-            <span>{phasePillLabel}</span>
+        {displayTimeline.phase !== "playing" && (
+          <div className="mx-auto mt-3 max-w-sm rounded-2xl border border-white/10 bg-black/25 px-3 py-3 shadow-card-game">
+            <div className="mb-2 flex items-center justify-between gap-2 text-[11px] font-extrabold uppercase tracking-[0.14em] text-white/65">
+              <span>{displayTimeline.phase === "waiting" ? "Countdown pre-partita" : "Chiusura turno"}</span>
+              <span>{phasePillLabel}</span>
+            </div>
+            <div className="h-2 overflow-hidden rounded-full bg-white/10">
+              <motion.div
+                className="h-full rounded-full bg-gold-shine"
+                animate={{ width: `${phaseProgress}%` }}
+                transition={{ duration: 0.45, ease: "easeOut" }}
+              />
+            </div>
+            <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 text-[11px] font-bold text-white/65">
+              {currentReservations.length > 0 && (
+                <span className="rounded-full border border-gold/35 bg-gold/10 px-2 py-1 text-gold">
+                  {currentReservations.length} {currentReservations.length === 1 ? "cartella" : "cartelle"} pronte
+                </span>
+              )}
+              {upcomingReservations.length > 0 && (
+                <span className="rounded-full border border-cyan-300/35 bg-cyan-400/10 px-2 py-1 text-cyan-100">
+                  {upcomingReservations.length} prenotate prossimo round
+                </span>
+              )}
+              {isLateEntry && (
+                <span className="rounded-full border border-red-300/30 bg-red-400/10 px-2 py-1 text-red-100">Ingresso tardivo</span>
+              )}
+            </div>
           </div>
-          <div className="h-2 overflow-hidden rounded-full bg-white/10">
-            <motion.div
-              className={`h-full rounded-full ${displayTimeline.phase === "playing" ? "bg-red-400" : "bg-gold-shine"}`}
-              animate={{ width: `${phaseProgress}%` }}
-              transition={{ duration: 0.45, ease: "easeOut" }}
-            />
-          </div>
-          <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5 text-[11px] font-bold text-white/65">
-            {currentReservations.length > 0 && (
-              <span className="rounded-full border border-gold/35 bg-gold/10 px-2 py-1 text-gold">
-                {currentReservations.length} {currentReservations.length === 1 ? "cartella" : "cartelle"} {displayTimeline.phase === "playing" ? "attive" : "pronte"}
-              </span>
-            )}
-            {upcomingReservations.length > 0 && (
-              <span className="rounded-full border border-cyan-300/35 bg-cyan-400/10 px-2 py-1 text-cyan-100">
-                {upcomingReservations.length} già prenotate per il prossimo round
-              </span>
-            )}
-            {isLateEntry && (
-              <span className="rounded-full border border-red-300/30 bg-red-400/10 px-2 py-1 text-red-100">Ingresso tardivo: giochi dal prossimo round</span>
-            )}
-          </div>
-        </div>
+        )}
       </div>
 
       {drawnNumbers.length > 0 && (
         <section data-tour="bingo-drawn-numbers" className="relative z-10 mt-3 px-4">
           <div className="mx-auto max-w-sm rounded-3xl border border-white/10 bg-black/30 px-3 py-3 shadow-card-game backdrop-blur-sm">
             <div className="mb-2 flex items-center justify-between gap-2">
-              <span className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-white/55">Ultimi numeri live</span>
+              <span className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-white/55">Ultimi numeri estratti</span>
               <span className="rounded-full border border-gold/35 bg-gold/10 px-2 py-0.5 text-[10px] font-extrabold text-gold">{drawnNumbers.length}/{room.maxNumber}</span>
             </div>
             <div className="flex flex-wrap justify-center gap-1.5">
@@ -1630,28 +1639,26 @@ function BingoCardPanel({
         boxShadow: theme.glow,
       }}
     >
-      <div className="mb-3 flex items-start justify-between gap-2">
-        <div>
-          <div className="flex flex-wrap items-center gap-1.5">
-            <p className="text-xs font-extrabold uppercase tracking-[0.16em] text-white">Cartella {index + 1}</p>
-          </div>
-          <p className="mt-1 text-[11px] font-bold text-white/75">{subtitle}</p>
+      <div className="mb-3 grid grid-cols-[minmax(0,1fr)_auto] items-start gap-3 border-b border-white/10 pb-3">
+        <div className="min-w-0 pr-1">
+          <p className="font-display text-[20px] font-black uppercase leading-none tracking-[0.20em] text-white drop-shadow-[0_2px_8px_rgba(0,0,0,0.35)]">Cartella {index + 1}</p>
+          <p className="mt-2 max-w-[170px] text-[12px] font-bold leading-snug text-white/78">{subtitle}</p>
         </div>
-        <div className="flex flex-col items-end gap-1 text-right">
-          <span className="rounded-full border border-yellow-200/45 bg-yellow-300/15 px-2 py-1 text-[10px] font-extrabold uppercase tracking-[0.14em] text-yellow-100">
+        <div className="flex w-[142px] shrink-0 flex-col items-stretch gap-1.5 text-right">
+          <span className="inline-flex min-h-[34px] items-center justify-center rounded-full border border-yellow-200/45 bg-[linear-gradient(135deg,rgba(250,204,21,0.24),rgba(34,197,94,0.14))] px-2.5 py-1 text-center text-[10px] font-black uppercase leading-tight tracking-[0.12em] text-yellow-50 shadow-[0_0_18px_rgba(250,204,21,0.16)]">
             {bingoLabel}
           </span>
           {isBest ? (
-            <span className="rounded-full border border-cyan-200/50 bg-cyan-300/18 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.12em] text-white">
+            <span className="inline-flex min-h-[25px] items-center justify-center rounded-full border border-cyan-200/50 bg-[linear-gradient(135deg,rgba(34,211,238,0.24),rgba(14,165,233,0.12))] px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.13em] text-cyan-50 shadow-[0_0_16px_rgba(34,211,238,0.12)]">
               Best focus
             </span>
           ) : null}
           {intermediateStatus ? (
-            <span className="rounded-full border border-white/12 bg-black/18 px-2 py-1 text-[9px] font-extrabold uppercase tracking-[0.12em] text-white/72">
+            <span className="inline-flex min-h-[29px] items-center justify-center rounded-full border border-emerald-200/20 bg-black/18 px-2 py-1 text-center text-[9px] font-black uppercase leading-tight tracking-[0.12em] text-emerald-50/85">
               {intermediateStatus}
             </span>
           ) : null}
-          {total > 1 ? <span className="text-[10px] font-extrabold text-white/70">{index + 1}/{total}</span> : null}
+          {total > 1 ? <span className="mt-0.5 text-right text-[11px] font-black text-white/70">{index + 1}/{total}</span> : null}
         </div>
       </div>
 
