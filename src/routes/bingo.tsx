@@ -1077,10 +1077,10 @@ function BingoPage() {
             <div className="mb-2 flex items-center justify-between gap-2">
               <span className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-white/55">Ultimi numeri estratti</span>
               <div className="flex items-center gap-1.5">
-                <span className="inline-flex items-center gap-1 rounded-full border border-cyan-300/35 bg-cyan-400/10 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.12em] text-cyan-100 shadow-[0_0_14px_rgba(34,211,238,0.12)]">
+                <span className="inline-flex flex-shrink-0 items-center gap-1 rounded-full border border-cyan-300/35 bg-cyan-400/10 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.12em] text-cyan-100 shadow-[0_0_14px_rgba(34,211,238,0.12)] whitespace-nowrap">
                   <span className="text-[10px]">👥</span>
                   <span className="font-display text-[12px] leading-none text-white">{liveCardsInRoom}</span>
-                  <span>cartelle live</span>
+                  <span className="whitespace-nowrap">cartelle live</span>
                 </span>
                 <span className="rounded-full border border-gold/35 bg-gold/10 px-2 py-0.5 text-[10px] font-extrabold text-gold">{drawnNumbers.length}/{room.maxNumber}</span>
               </div>
