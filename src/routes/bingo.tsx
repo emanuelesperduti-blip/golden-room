@@ -1074,16 +1074,16 @@ function BingoPage() {
       {drawnNumbers.length > 0 && (
         <section data-tour="bingo-drawn-numbers" className="relative z-10 mt-3 px-4">
           <div className="mx-auto max-w-sm rounded-3xl border border-white/10 bg-black/30 px-3 py-3 shadow-card-game backdrop-blur-sm">
-            <div className="mb-2 flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-white/55">Ultimi numeri estratti</span>
+            <div className="mb-2 flex items-center justify-between gap-2">
+              <span className="text-[10px] font-extrabold uppercase tracking-[0.18em] text-white/55">Ultimi numeri estratti</span>
+              <div className="flex items-center gap-1.5">
+                <span className="inline-flex items-center gap-1 rounded-full border border-cyan-300/35 bg-cyan-400/10 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.12em] text-cyan-100 shadow-[0_0_14px_rgba(34,211,238,0.12)]">
+                  <span className="text-[10px]">👥</span>
+                  <span className="font-display text-[12px] leading-none text-white">{liveCardsInRoom}</span>
+                  <span>cartelle live</span>
+                </span>
                 <span className="rounded-full border border-gold/35 bg-gold/10 px-2 py-0.5 text-[10px] font-extrabold text-gold">{drawnNumbers.length}/{room.maxNumber}</span>
               </div>
-              <span className="inline-flex w-fit items-center gap-1 rounded-full border border-cyan-300/35 bg-cyan-400/10 px-2 py-0.5 text-[9px] font-extrabold uppercase tracking-[0.12em] text-cyan-100 shadow-[0_0_14px_rgba(34,211,238,0.12)]">
-                <span className="text-[10px]">👥</span>
-                <span className="font-display text-[12px] leading-none text-white">{liveCardsInRoom}</span>
-                <span className="whitespace-nowrap">cartelle live</span>
-              </span>
             </div>
             <div className="flex flex-wrap justify-center gap-1.5">
               {drawnNumbers.slice(-10).map((n) => (
